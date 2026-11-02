@@ -1,4 +1,5 @@
 <!-- Nombre del proyecto: cambiarlo aquí y en la primera línea de cada doc -->
+
 > **Proyecto:** LinkShelf
 
 # LinkShelf
@@ -12,49 +13,53 @@ Los favoritos del navegador crecieron sin control: cientos de enlaces de TLDR, m
 ## La solución
 
 - **Base de datos como fuente de verdad** (Firebase: Cloud Firestore + Auth, plan gratuito Spark): cualquier navegador o dispositivo lee la misma colección.
-- **Extensión de navegador** (Chrome, Edge, Brave, Firefox) para guardar la pestaña actual en un clic o desde el menú contextual *Guardar enlace*.
+- **Extensión de navegador** (Chrome, Edge, Brave, Firefox) para guardar la pestaña actual en un clic o desde el menú contextual _Guardar enlace_.
 - **Web app** (Angular) para buscar, filtrar, editar y limpiar la colección.
-- **Normalización y deduplicación inteligente, 100 % en el cliente**: el paquete `@linkshelf/core` quita parámetros de tracking, desenvuelve redirecciones de TLDR sin red, calcula el ID del documento como SHA-256 de la URL normalizada (duplicados exactos imposibles por construcción) y avisa de *posible duplicado* por similitud de títulos antes de guardar.
+- **Normalización y deduplicación inteligente, 100 % en el cliente**: el paquete `@linkshelf/core` quita parámetros de tracking, desenvuelve redirecciones de TLDR sin red, calcula el ID del documento como SHA-256 de la URL normalizada (duplicados exactos imposibles por construcción) y avisa de _posible duplicado_ por similitud de títulos antes de guardar.
 
 ## Funcionalidades
 
-| MVP | Fases posteriores |
-|---|---|
-| Guardar enlace desde extensión y web | Importar favoritos de Chrome (HTML / `chrome.bookmarks`) con dedupe masivo |
-| Limpieza de `utm_*`, `fbclid`, `gclid`, `ref`, tracking de TLDR… | Importar enlaces desde correos TLDR en Gmail |
-| Resolución de redirecciones (extensión) y URL canónica | Sugerencia de categoría con LLM gratuito |
-| Aviso de duplicado exacto (ID = hash) y cercano (trigramas/Jaccard en el cliente) | Búsqueda de texto mejorada (índice local con MiniSearch) |
-| Categoría principal + etiquetas secundarias | Estado leído/no leído y favoritos |
-| Sugerencia de categoría por reglas | Detección por hash de contenido |
-| Filtros por categoría, etiqueta, dominio, fecha | Exportación JSON/HTML |
+| MVP                                                                               | Fases posteriores                                                          |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Guardar enlace desde extensión y web                                              | Importar favoritos de Chrome (HTML / `chrome.bookmarks`) con dedupe masivo |
+| Limpieza de `utm_*`, `fbclid`, `gclid`, `ref`, tracking de TLDR…                  | Importar enlaces desde correos TLDR en Gmail                               |
+| Resolución de redirecciones (extensión) y URL canónica                            | Sugerencia de categoría con LLM gratuito                                   |
+| Aviso de duplicado exacto (ID = hash) y cercano (trigramas/Jaccard en el cliente) | Búsqueda de texto mejorada (índice local con MiniSearch)                   |
+| Categoría principal + etiquetas secundarias                                       | Estado leído/no leído y favoritos                                          |
+| Sugerencia de categoría por reglas                                                | Detección por hash de contenido                                            |
+| Filtros por categoría, etiqueta, dominio, fecha                                   | Exportación JSON/HTML                                                      |
 
 ## Categorías
 
 Cada enlace tiene **una categoría principal** y **cero o más etiquetas secundarias** (una etiqueta puede tener el mismo nombre que una categoría; ej. un tutorial de IA = `Tutoriales` + etiqueta `ia`).
 
-| Categoría | Contenido |
-|---|---|
-| **Artículos** | Artículos científicos de distintas disciplinas (arXiv, DOI, revistas) |
-| **Tutoriales** | Guías paso a paso para hacer algo |
-| **Projects** | Repositorios de GitHub interesantes |
-| **WebPages** | Sitios interactivos: juegos, apps, colecciones de assets (uiverse…) |
-| **IA** | Todo lo relacionado con inteligencia artificial |
-| **Diseño** | Artículos, guías e informes de diseño y diseño web |
+| Categoría      | Contenido                                                             |
+| -------------- | --------------------------------------------------------------------- |
+| **Artículos**  | Artículos científicos de distintas disciplinas (arXiv, DOI, revistas) |
+| **Tutoriales** | Guías paso a paso para hacer algo                                     |
+| **Projects**   | Repositorios de GitHub interesantes                                   |
+| **WebPages**   | Sitios interactivos: juegos, apps, colecciones de assets (uiverse…)   |
+| **IA**         | Todo lo relacionado con inteligencia artificial                       |
+| **Diseño**     | Artículos, guías e informes de diseño y diseño web                    |
 
 ## Stack
 
-| Capa | Tecnología | Hosting / costo |
-|---|---|---|
-| Web app | Angular 22 (standalone, signals, zoneless), TypeScript strict | Vercel Hobby — $0 |
-| Extensión | Manifest V3 + WXT (Vite) + TypeScript | Carga local / Chrome Web Store opcional (USD 5 único, opcional) |
-| Backend / BD | Firebase: Cloud Firestore (edición Standard) + Firebase Auth (Google) + Security Rules | Plan Spark — $0, sin tarjeta |
-| Lógica de “servidor” | **Ninguna**: sin Cloud Functions (requieren plan Blaze). Todo corre en `@linkshelf/core` en el cliente | — |
-| Lógica compartida | Paquete `@linkshelf/core` (normalizador, desenvolvedor TLDR, hash de ID, similitud, reglas de categoría) | — |
-| Monorepo | pnpm workspaces | — |
-| Testing | Vitest (unit), Firebase Emulator Suite + `@firebase/rules-unit-testing` (reglas), Playwright (e2e) | — |
-| CI | GitHub Actions | Gratis (repo público o cuota privada) |
+| Capa                 | Tecnología                                                                                               | Hosting / costo                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Web app              | Angular 22 (standalone, signals, zoneless), TypeScript strict                                            | Vercel Hobby — $0                                               |
+| Extensión            | Manifest V3 + WXT (Vite) + TypeScript                                                                    | Carga local / Chrome Web Store opcional (USD 5 único, opcional) |
+| Backend / BD         | Firebase: Cloud Firestore (edición Standard) + Firebase Auth (Google) + Security Rules                   | Plan Spark — $0, sin tarjeta                                    |
+| Lógica de “servidor” | **Ninguna**: sin Cloud Functions (requieren plan Blaze). Todo corre en `@linkshelf/core` en el cliente   | —                                                               |
+| Lógica compartida    | Paquete `@linkshelf/core` (normalizador, desenvolvedor TLDR, hash de ID, similitud, reglas de categoría) | —                                                               |
+| Monorepo             | pnpm workspaces                                                                                          | —                                                               |
+| Testing              | Vitest (unit), Firebase Emulator Suite + `@firebase/rules-unit-testing` (reglas), Playwright (e2e)       | —                                                               |
+| CI                   | GitHub Actions                                                                                           | Gratis (repo público o cuota privada)                           |
 
-## Estructura del monorepo (planeada)
+## Estado
+
+El MVP de la fase 1 corre en local contra los **emuladores** (`demo-linkshelf`). El proyecto Firebase real es `linkshelf-hugo` (Spark, Firestore en `nam5`, Auth con Google). La `apiKey` y el `appId` no están en el repo: van en `.env` o en los secrets de Vercel. Las reglas de Firestore están versionadas y **no se despliegan** desde aquí.
+
+## Estructura del monorepo
 
 ```
 link-manager/
@@ -77,24 +82,26 @@ link-manager/
 └── package.json
 ```
 
-## Inicio rápido (comandos planeados)
+## Inicio rápido
 
 ```bash
 corepack enable
 pnpm install
-cp .env.example .env            # completar valores
-pnpm firebase emulators:start   # Auth + Firestore locales (requiere Java 11+)
-pnpm --filter web dev           # http://localhost:4200
-pnpm --filter extension dev     # abre Chrome con la extensión cargada
-pnpm test                       # Vitest en todo el monorepo
+cp .env.example .env            # opcional: sin apiKey se usan los emuladores
+pnpm emulators                  # Auth :9099 y Firestore :8080, proyecto demo-linkshelf
+pnpm dev                        # http://127.0.0.1:4200
+pnpm dev:extension              # WXT abre Chrome con la extensión
+pnpm test                       # Vitest de @linkshelf/core
 pnpm test:rules                 # Security Rules contra el emulador
-pnpm --filter web e2e           # Playwright
+pnpm e2e                        # Playwright contra los emuladores
 ```
+
+La web, con emuladores, muestra _Entrar en local_ además de _Continuar con Google_. En producción (`FIREBASE_API_KEY` presente y `FIREBASE_USE_EMULATORS` distinto de `true`) solo queda Google.
 
 ## Roadmap (resumen)
 
-0. Documentación y scaffolding ← *estamos aquí*
-1. MVP: core + Firestore/Auth/Rules + web + extensión
+0. Documentación y scaffolding
+1. MVP: core + Firestore/Auth/Rules + web + extensión ← _este hito, sin deploy_
 2. Importación de favoritos de Chrome con dedupe masivo
 3. Importación desde Gmail (TLDR), leído/no leído, favoritos
 4. Búsqueda local avanzada, sugerencia con LLM, hash de contenido

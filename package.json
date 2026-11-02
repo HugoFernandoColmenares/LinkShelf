@@ -1,0 +1,51 @@
+{
+  "name": "linkshelf",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "env:write": "node scripts/write-env.mjs",
+    "dev": "pnpm --filter @linkshelf/web dev",
+    "dev:extension": "pnpm --filter @linkshelf/extension dev",
+    "lint": "eslint . && prettier --check .",
+    "lint:fix": "eslint . --fix && prettier --write .",
+    "format": "prettier --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm --filter @linkshelf/core test",
+    "test:coverage": "pnpm --filter @linkshelf/core test:coverage",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-linkshelf \"pnpm exec vitest run --config firebase/vitest.config.ts\"",
+    "e2e": "firebase emulators:exec --only auth,firestore --project demo-linkshelf \"pnpm --filter @linkshelf/web e2e\"",
+    "build": "pnpm --filter @linkshelf/web build && pnpm --filter @linkshelf/extension build",
+    "firebase": "firebase",
+    "emulators": "firebase emulators:start --project demo-linkshelf"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@firebase/util",
+      "@parcel/watcher",
+      "esbuild",
+      "lmdb",
+      "msgpackr-extract",
+      "protobufjs",
+      "re2"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@eslint/js": "^9.39.1",
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "angular-eslint": "^22.6.0",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "firebase": "^13.2.0",
+    "firebase-tools": "^15.34.2",
+    "prettier": "^3.6.2",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.46.2",
+    "vitest": "^5.1.0"
+  }
+}
