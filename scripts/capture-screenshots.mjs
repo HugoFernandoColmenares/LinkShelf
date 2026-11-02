@@ -16,8 +16,14 @@ await page.waitForURL(/\/links/);
 const samples = [
   ['https://github.com/vercel/next.js?utm_source=tldrnewsletter', 'Next.js, el framework de React'],
   ['https://arxiv.org/pdf/1706.03762v5.pdf', 'Attention Is All You Need'],
-  ['https://www.smashingmagazine.com/2026/10/design-systems/?utm_medium=email', 'Design systems que escalan'],
-  ['https://www.example.com/post/?utm_source=tldrnewsletter&utm_medium=email', 'Una guía de prueba'],
+  [
+    'https://www.smashingmagazine.com/2026/10/design-systems/?utm_medium=email',
+    'Design systems que escalan',
+  ],
+  [
+    'https://www.example.com/post/?utm_source=tldrnewsletter&utm_medium=email',
+    'Una guía de prueba',
+  ],
 ];
 
 for (const [url, title] of samples) {
