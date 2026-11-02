@@ -1,0 +1,10 @@
+dist
+coverage
+.angular
+.output
+.wxt
+node_modules
+pnpm-lock.yaml
+docs/screenshots
+*.png
+apps/web/src/environments/environment.ts

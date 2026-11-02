@@ -4,8 +4,10 @@ node_modules/
 
 # Builds
 dist/
+packages/*/dist/
 .output/
 .wxt/
+**/.wxt/
 .angular/
 out-tsc/
 coverage/
@@ -16,6 +18,14 @@ coverage/
 .env
 .env.*
 !.env.example
+apps/web/src/environments/environment.ts
+
+# Firebase local (no desplegar desde el agente)
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
 
 # Supabase local
 .supabase/

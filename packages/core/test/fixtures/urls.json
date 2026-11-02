@@ -1,0 +1,50 @@
+[
+  {
+    "input": "https://www.Example.com/post/?utm_source=tldrnewsletter&utm_medium=email",
+    "expected": "https://example.com/post"
+  },
+  {
+    "input": "http://example.com:80/a//b/./c/index.html#section",
+    "expected": "https://example.com/a/b/c"
+  },
+  {
+    "input": "https://example.com/search?z=1&a=2&fbclid=IwAR0x",
+    "expected": "https://example.com/search?a=2&z=1"
+  },
+  {
+    "input": "https://tracking.tldrnewsletter.com/CL0/https:%2F%2Fblog.example.com%2Fai-agents%3Futm_source=tldrai/1/0100019a/abc=",
+    "expected": "https://blog.example.com/ai-agents"
+  },
+  {
+    "input": "https://github.com/Microsoft/TypeScript.git",
+    "expected": "https://github.com/microsoft/typescript"
+  },
+  {
+    "input": "https://github.com/vercel/next.js/blob/canary/README.md?ref=tldr",
+    "expected": "https://github.com/vercel/next.js"
+  },
+  {
+    "input": "https://github.com/vercel/next.js/issues/123",
+    "expected": "https://github.com/vercel/next.js/issues/123"
+  },
+  {
+    "input": "https://arxiv.org/pdf/2401.01234v3.pdf",
+    "expected": "https://arxiv.org/abs/2401.01234"
+  },
+  {
+    "input": "https://youtu.be/dQw4w9WgXcQ?si=abc&t=42",
+    "expected": "https://youtube.com/watch?t=42&v=dQw4w9WgXcQ"
+  },
+  {
+    "input": "https://example.com/?mc_cid=123&mc_eid=456&ref=producthunt",
+    "expected": "https://example.com"
+  },
+  {
+    "input": "https://app.example.com/#/dashboard?utm_campaign=x",
+    "expected": "https://app.example.com/#/dashboard"
+  },
+  {
+    "input": "https://www.google.com/url?q=https://uiverse.io/buttons&sa=D",
+    "expected": "https://uiverse.io/buttons"
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "name": "@linkshelf/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "ng": "ng",
+    "predev": "pnpm --filter @linkshelf/core build && pnpm --filter @linkshelf/firebase build && node ../../scripts/write-env.mjs",
+    "dev": "NG_CLI_ANALYTICS=false ng serve --host 127.0.0.1 --port 4200",
+    "prebuild": "pnpm --filter @linkshelf/core build && pnpm --filter @linkshelf/firebase build && node ../../scripts/write-env.mjs",
+    "build": "ng build",
+    "typecheck": "pnpm --filter @linkshelf/core build && pnpm --filter @linkshelf/firebase build && node ../../scripts/write-env.mjs && tsc -p tsconfig.app.json --noEmit",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@angular/common": "^22.2.0",
+    "@angular/compiler": "^22.2.0",
+    "@angular/core": "^22.2.0",
+    "@angular/forms": "^22.2.0",
+    "@angular/platform-browser": "^22.2.0",
+    "@angular/router": "^22.2.0",
+    "@linkshelf/core": "workspace:*",
+    "@linkshelf/firebase": "workspace:*",
+    "firebase": "^13.2.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.2.5",
+    "@angular/cli": "^22.2.5",
+    "@angular/compiler-cli": "^22.2.0",
+    "@playwright/test": "^1.64.1",
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.3"
+  }
+}

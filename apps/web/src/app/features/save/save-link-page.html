@@ -1,0 +1,89 @@
+<section class="panel">
+  <h1>Guardar enlace</h1>
+  <form (submit)="review($event)">
+    <label for="url">URL</label>
+    <input
+      id="url"
+      name="url"
+      type="url"
+      required
+      placeholder="https://…"
+      [value]="url()"
+      (input)="onUrl($event)"
+    />
+    <button type="submit" class="button" [disabled]="busy()">Revisar</button>
+  </form>
+
+  @if (error()) {
+    <p class="form-error" role="alert">{{ error() }}</p>
+  }
+
+  @if (savedId(); as id) {
+    <p class="success" role="status">Enlace guardado.</p>
+    <a class="button" routerLink="/links">Ver en la biblioteca</a>
+    <a [routerLink]="['/links', id]">Abrir detalle</a>
+  } @else if (prepared(); as item) {
+    @if (duplicate(); as check) {
+      <ls-duplicate-alert [check]="check" (open)="open($event)" />
+    }
+    <p class="mono">{{ item.normalizedUrl }}</p>
+    @if (stripped().length) {
+      <p class="hint">Quitamos {{ stripped().length }} parámetros de rastreo.</p>
+    }
+    @if (item.metaStatus === 'pending') {
+      <p class="hint">
+        Metadatos pendientes: la web no puede leer el sitio. La extensión puede completarlos.
+      </p>
+    }
+    @if (lowConfidence()) {
+      <p class="hint">Confianza baja: revisa la categoría sugerida.</p>
+    }
+
+    <label for="title">Título</label>
+    <input
+      id="title"
+      name="title"
+      required
+      maxlength="500"
+      [value]="title()"
+      (input)="onTitle($event)"
+    />
+
+    <label for="category">Categoría</label>
+    <select id="category" [value]="category()" (change)="onCategory($event)">
+      @for (option of categories; track option.slug) {
+        <option [value]="option.slug">{{ option.name }}</option>
+      }
+    </select>
+
+    <ls-tag-editor [tags]="tags()" (tagsChange)="tags.set($event)" />
+
+    <label for="note">Nota</label>
+    <textarea
+      id="note"
+      name="note"
+      maxlength="2000"
+      rows="3"
+      [value]="note()"
+      (input)="onNote($event)"
+    ></textarea>
+
+    <div class="actions">
+      <a routerLink="/links" class="button">Cancelar</a>
+      @if (duplicate()?.level === 'exact') {
+        @if (existingId(); as id) {
+          <a class="button button--primary" [routerLink]="['/links', id]">Ver existente</a>
+        }
+        <button type="button" class="button" (click)="mergeTags()">Actualizar etiquetas</button>
+      } @else {
+        <button type="button" class="button button--primary" [disabled]="busy()" (click)="save()">
+          {{
+            duplicate()?.level === 'possible' || duplicate()?.level === 'probable'
+              ? 'Guardar igual'
+              : 'Guardar'
+          }}
+        </button>
+      }
+    </div>
+  }
+</section>

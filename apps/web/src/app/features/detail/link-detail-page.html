@@ -1,0 +1,84 @@
+@if (link(); as item) {
+  <article class="panel">
+    <p><a routerLink="/links">← Biblioteca</a></p>
+    <h1>Editar enlace</h1>
+    <p class="link-card__meta">
+      <ls-category-badge [slug]="item.category" />
+      <time [attr.datetime]="item.createdAt?.toISOString()">{{ formatWhen(item.createdAt) }}</time>
+    </p>
+    <dl class="meta">
+      <div>
+        <dt>URL original</dt>
+        <dd>
+          <a [href]="item.url" target="_blank" rel="noreferrer noopener">{{ item.url }}</a>
+        </dd>
+      </div>
+      <div>
+        <dt>URL normalizada</dt>
+        <dd class="mono">{{ item.normalizedUrl }}</dd>
+      </div>
+      <div>
+        <dt>Dominio</dt>
+        <dd>{{ item.domain }}</dd>
+      </div>
+    </dl>
+
+    <label for="edit-title">Título</label>
+    <input id="edit-title" [value]="title()" maxlength="500" (input)="onTitle($event)" />
+
+    <label for="edit-category">Categoría</label>
+    <select id="edit-category" [value]="category()" (change)="onCategory($event)">
+      @for (option of categories; track option.slug) {
+        <option [value]="option.slug">{{ option.name }}</option>
+      }
+    </select>
+
+    <ls-tag-editor [tags]="tags()" (tagsChange)="tags.set($event)" />
+
+    <label for="edit-description">Descripción</label>
+    <textarea
+      id="edit-description"
+      rows="3"
+      maxlength="1000"
+      [value]="description()"
+      (input)="onDescription($event)"
+    ></textarea>
+
+    <label for="edit-note">Nota</label>
+    <textarea
+      id="edit-note"
+      rows="3"
+      maxlength="2000"
+      [value]="note()"
+      (input)="onNote($event)"
+    ></textarea>
+
+    @if (saved()) {
+      <p class="success" role="status">Cambios guardados.</p>
+    }
+    @if (error()) {
+      <p class="form-error" role="alert">{{ error() }}</p>
+    }
+
+    <div class="actions">
+      <button type="button" class="button button--primary" [disabled]="busy()" (click)="save()">
+        Guardar cambios
+      </button>
+      <button type="button" class="button button--danger" (click)="askRemove()">Eliminar</button>
+    </div>
+
+    <dialog #confirm>
+      <h2>¿Eliminar este enlace?</h2>
+      <p>Esta acción no se puede deshacer.</p>
+      <div class="actions">
+        <button type="button" class="button" (click)="confirm.close()">Cancelar</button>
+        <button type="button" class="button button--danger" (click)="remove()">Eliminar</button>
+      </div>
+    </dialog>
+  </article>
+} @else if (!store.loading()) {
+  <section class="panel">
+    <h1>No encontramos ese enlace</h1>
+    <a routerLink="/links">Volver a la biblioteca</a>
+  </section>
+}

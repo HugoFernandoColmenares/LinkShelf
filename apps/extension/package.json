@@ -1,0 +1,23 @@
+{
+  "name": "@linkshelf/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @linkshelf/core build && pnpm --filter @linkshelf/firebase build",
+    "dev": "wxt",
+    "prebuild": "pnpm --filter @linkshelf/core build && pnpm --filter @linkshelf/firebase build",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "typecheck": "pnpm --filter @linkshelf/core build && pnpm --filter @linkshelf/firebase build && wxt prepare && tsc --noEmit"
+  },
+  "dependencies": {
+    "@linkshelf/core": "workspace:*",
+    "@linkshelf/firebase": "workspace:*",
+    "firebase": "^13.2.0"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "wxt": "^0.21.5"
+  }
+}

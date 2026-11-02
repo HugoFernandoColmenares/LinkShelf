@@ -1,0 +1,36 @@
+<div class="shell">
+  <a class="skip" href="#contenido">Saltar al contenido</a>
+  <header class="topbar">
+    <a routerLink="/links" class="brand">⚓ LinkShelf</a>
+    <form class="search" role="search" (submit)="$event.preventDefault()">
+      <label class="sr-only" for="search">Buscar enlaces</label>
+      <input
+        id="search"
+        type="search"
+        placeholder="Buscar enlaces…  (/)"
+        [value]="query()"
+        (input)="onQuery($event)"
+      />
+    </form>
+    <a routerLink="/links/new" class="button button--primary">+ Guardar</a>
+    <button
+      type="button"
+      class="icon-button"
+      (click)="cycleTheme()"
+      [attr.aria-label]="themeLabel()"
+    >
+      ◐
+    </button>
+    <button
+      type="button"
+      class="icon-button"
+      (click)="logout()"
+      [attr.aria-label]="'Cerrar sesión ' + email()"
+    >
+      {{ email() || 'Salir' }}
+    </button>
+  </header>
+  <main id="contenido">
+    <router-outlet />
+  </main>
+</div>

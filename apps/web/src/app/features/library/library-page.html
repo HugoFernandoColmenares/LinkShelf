@@ -1,0 +1,100 @@
+<div class="library">
+  <aside class="sidebar">
+    <button
+      type="button"
+      [attr.aria-current]="category() ? null : 'page'"
+      (click)="setCategory(null)"
+    >
+      Todas <span>{{ store.links().length }}</span>
+    </button>
+    @for (item of categories; track item.slug) {
+      <button
+        type="button"
+        [attr.aria-current]="category() === item.slug ? 'page' : null"
+        (click)="setCategory(item.slug)"
+      >
+        {{ item.name }} <span>{{ store.categoryCounts().get(item.slug) }}</span>
+      </button>
+    }
+    <h2>Etiquetas</h2>
+    @for (entry of store.tagCounts().slice(0, 12); track entry[0]) {
+      <button type="button" (click)="toggleTag(entry[0])">
+        #{{ entry[0] }} <span>{{ entry[1] }}</span>
+      </button>
+    }
+    <label class="check">
+      <input
+        type="checkbox"
+        [checked]="includeTags()"
+        (change)="setParam({ includeTags: includeTags() ? null : '1' })"
+      />
+      Incluir etiquetas
+    </label>
+  </aside>
+  <section class="results">
+    <div class="filters">
+      <label>
+        Dominio
+        <select [value]="domain()" (change)="onDomain($event)">
+          <option value="">Todos</option>
+          @for (item of store.domains(); track item) {
+            <option [value]="item">{{ item }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Desde
+        <input type="date" [value]="from()" (change)="onDate('from', $event)" />
+      </label>
+      <label>
+        Hasta
+        <input type="date" [value]="to()" (change)="onDate('to', $event)" />
+      </label>
+      <button
+        type="button"
+        class="text-button"
+        (click)="setParam({ tagMode: tagMode() === 'all' ? 'any' : 'all' })"
+      >
+        Etiquetas: {{ tagMode() === 'all' ? 'todas' : 'cualquiera' }}
+      </button>
+    </div>
+    @if (store.error()) {
+      <p class="form-error" role="alert">{{ store.error() }}</p>
+    }
+    @if (store.loading()) {
+      <p class="muted">Cargando enlaces…</p>
+    } @else if (page().length === 0) {
+      <ls-empty-state
+        [message]="
+          store.links().length
+            ? 'Ningún enlace coincide con los filtros.'
+            : 'Aún no hay enlaces. Guarda el primero desde la extensión o con + Guardar.'
+        "
+        [showSave]="store.links().length === 0"
+      />
+    } @else {
+      <ul class="link-list">
+        @for (link of page(); track link.id) {
+          <li class="link-card">
+            <a class="link-card__title" [routerLink]="['/links', link.id]">{{ link.title }}</a>
+            <p class="link-card__meta">
+              <span class="mono">{{ link.domain }}</span>
+              <ls-category-badge [slug]="link.category" />
+              @for (tag of link.tags; track tag) {
+                <span class="chip">#{{ tag }}</span>
+              }
+              <time [attr.datetime]="link.createdAt?.toISOString()">{{
+                formatWhen(link.createdAt)
+              }}</time>
+            </p>
+          </li>
+        }
+      </ul>
+      @if (page().length < filtered().length) {
+        <button type="button" class="button" (click)="visible.update((count) => count + 30)">
+          Mostrar más
+        </button>
+      }
+    }
+  </section>
+</div>
