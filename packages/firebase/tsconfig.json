@@ -2,7 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "src"
+    "paths": {
+      "@linkshelf/core": ["../core/src/index.ts"]
+    }
   },
   "include": ["src"]
 }
