@@ -1,0 +1,43 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Builds
+dist/
+.output/
+.wxt/
+.angular/
+out-tsc/
+coverage/
+*.zip
+*.crx
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Supabase local
+.supabase/
+supabase/.temp/
+supabase/.branches/
+
+# Vercel
+.vercel/
+
+# Testing
+playwright-report/
+test-results/
+blob-report/
+
+# Logs y SO
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editores
+.idea/
+.vscode/*
+!.vscode/extensions.json
