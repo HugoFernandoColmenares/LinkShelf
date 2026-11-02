@@ -1,243 +1,211 @@
 > **Proyecto:** LinkShelf
 
-# Modelo de datos
+# Modelo de datos (Cloud Firestore)
 
-Postgres (Supabase). Extensiones: `pg_trgm`, `unaccent`, `pgcrypto` (UUID). Todas las tablas en el esquema `public` con **RLS activada**.
+Base de datos: **Cloud Firestore, edición Standard, modo nativo**, base `(default)`. Firestore es documental: no hay tablas, claves foráneas ni restricciones `unique`; la integridad se obtiene con **IDs deterministas**, **transacciones** y **Security Rules** (ver [seguridad.md](seguridad.md)).
 
-## Diagrama ER
+## Árbol de colecciones
+
+```
+users/{uid}                          ← documento de perfil y preferencias
+  └── links/{linkId}                 ← un documento por enlace; linkId = sha256Hex(normalizedUrl)
+  └── importBatches/{batchId}        ← Fase 2: informe y reversión de importaciones
+  └── domainRules/{domain}           ← Fase 3: reglas personales aprendidas de correcciones
+```
 
 ```mermaid
 erDiagram
-    profiles ||--o{ links : posee
-    profiles ||--o{ tags : posee
-    profiles ||--o{ import_batches : ejecuta
-    categories ||--o{ links : clasifica
-    links ||--o{ link_tags : tiene
-    tags ||--o{ link_tags : etiqueta
-    import_batches ||--o{ links : origina
-
-    profiles {
-        uuid id PK
-        text display_name
-        text default_category FK
-        timestamptz created_at
-    }
-    categories {
-        text slug PK
-        text name
-        text description
-        text color
-        smallint sort_order
-    }
-    links {
-        uuid id PK
-        uuid user_id FK
-        text original_url
-        text normalized_url
-        text canonical_url
-        text domain
-        text title
-        text description
-        text image_url
-        text category_slug FK
-        text suggested_category
-        text note
-        text content_hash
-        boolean is_read
-        boolean is_favorite
-        uuid import_batch_id FK
-        timestamptz created_at
-        timestamptz updated_at
-    }
-    tags {
-        uuid id PK
-        uuid user_id FK
-        text slug
-        text name
-    }
-    link_tags {
-        uuid link_id FK
-        uuid tag_id FK
-    }
-    import_batches {
-        uuid id PK
-        uuid user_id FK
-        text source
-        int total
-        int inserted
-        int duplicates
-        timestamptz created_at
-    }
+  USER ||--o{ LINK : "users/uid/links"
+  USER ||--o{ IMPORT_BATCH : "users/uid/importBatches"
+  USER ||--o{ DOMAIN_RULE : "users/uid/domainRules"
+  IMPORT_BATCH ||--o{ LINK : "importBatchId"
+  USER {
+    string displayName
+    string email
+    string defaultCategory
+    string theme
+    timestamp createdAt
+    timestamp updatedAt
+  }
+  LINK {
+    string id "sha256 hex de normalizedUrl"
+    string url
+    string normalizedUrl
+    string canonicalUrl
+    string title
+    string description
+    string imageUrl
+    string domain
+    string category
+    string suggestedCategory
+    array tags
+    array keywords
+    string status "unread o read"
+    boolean favorite
+    string source "tldr, manual o import"
+    string metaStatus "pending, ok o failed"
+    string note
+    string importBatchId
+    timestamp createdAt
+    timestamp updatedAt
+  }
+  IMPORT_BATCH {
+    string source
+    int total
+    int created
+    int duplicates
+    int failed
+    timestamp createdAt
+  }
+  DOMAIN_RULE {
+    string category
+    int corrections
+    timestamp updatedAt
+  }
 ```
 
-## DDL (migración `0001_init.sql`)
+## Documento `users/{uid}/links/{linkId}`
 
-```sql
-create extension if not exists pg_trgm;
-create extension if not exists unaccent;
+| Campo | Tipo Firestore | Obligatorio | Descripción / validación |
+|---|---|---|---|
+| *(ID)* | string | sí | `sha256Hex(normalizedUrl)`: 64 caracteres `[0-9a-f]`. Lo calcula `@linkshelf/core` con `crypto.subtle.digest('SHA-256', …)` |
+| `url` | string | sí | URL tal como se recibió (tras quitar espacios), ≤ 2 048 caracteres. Se conserva para auditoría |
+| `normalizedUrl` | string | sí | Salida de `normalizeUrl` (sin tracking, sin wrappers conocidos). Fuente del ID |
+| `canonicalUrl` | string \| null | no | `rel=canonical`/`og:url` normalizado si es del mismo dominio registrable (solo cuando la extensión pudo leer el HTML) |
+| `title` | string | sí | 1–500 caracteres. Si no hay metadatos: título de la pestaña o la propia URL |
+| `description` | string \| null | no | `og:description`/`meta description`, ≤ 1 000 caracteres |
+| `imageUrl` | string \| null | no | `og:image` absoluto (se muestra como miniatura; no se descarga ni se guarda) |
+| `domain` | string | sí | Host registrable sin `www.` (`github.com`, `blog.example.com` → `example.com` según la Public Suffix List embebida en core) |
+| `category` | string | sí | Uno de `articulos`, `tutoriales`, `projects`, `webpages`, `ia`, `diseno` |
+| `suggestedCategory` | string \| null | no | Lo que propuso `suggestCategory`; si difiere de `category` es una corrección (aprendizaje Fase 3) |
+| `tags` | array\<string\> | sí (puede ser `[]`) | 0–10 etiquetas, minúsculas, sin acentos, `^[a-z0-9-]{1,32}$` |
+| `keywords` | array\<string\> | sí | Tokens del título normalizados + trigramas seleccionados (ver abajo), ≤ 60 elementos. Sirve para `array-contains-any` y para similitud en el cliente |
+| `status` | string | sí | `unread` (por defecto) o `read` |
+| `favorite` | boolean | sí | `false` por defecto |
+| `source` | string | sí | `tldr` (URL original de `tldrnewsletter.com` o `utm_source=tldr*`), `manual` o `import` |
+| `metaStatus` | string | sí | `ok`, `pending` (guardado desde la web sin poder leer el sitio) o `failed` |
+| `note` | string \| null | no | Nota libre, ≤ 2 000 caracteres |
+| `importBatchId` | string \| null | no | Fase 2 |
+| `createdAt` | timestamp | sí | `serverTimestamp()`; las reglas exigen `request.time` |
+| `updatedAt` | timestamp | sí | `serverTimestamp()` en cada escritura |
 
--- unaccent no es IMMUTABLE; envoltura para poder indexar
-create or replace function public.f_unaccent(text)
-returns text language sql immutable parallel safe strict
-as $$ select public.unaccent('public.unaccent'::regdictionary, $1) $$;
+Tamaño típico: 1–2 KB por documento (límite de Firestore: 1 MiB).
 
-create table public.categories (
-  slug        text primary key check (slug ~ '^[a-z0-9-]+$'),
-  name        text not null,
-  description text not null,
-  color       text not null,
-  sort_order  smallint not null default 0
-);
+### Ejemplo
 
-insert into public.categories (slug, name, description, color, sort_order) values
-  ('articulos',  'Artículos',  'Artículos científicos de distintas disciplinas', '#2563eb', 1),
-  ('tutoriales', 'Tutoriales', 'Guías paso a paso', '#16a34a', 2),
-  ('projects',   'Projects',   'Repositorios de GitHub interesantes', '#7c3aed', 3),
-  ('webpages',   'WebPages',   'Sitios interactivos: juegos, apps, assets', '#ea580c', 4),
-  ('ia',         'IA',         'Todo lo relacionado con inteligencia artificial', '#db2777', 5),
-  ('diseno',     'Diseño',     'Diseño y diseño web', '#0891b2', 6);
-
-create table public.profiles (
-  id               uuid primary key references auth.users(id) on delete cascade,
-  display_name     text,
-  default_category text references public.categories(slug) default 'webpages',
-  created_at       timestamptz not null default now()
-);
-
-create table public.import_batches (
-  id         uuid primary key default gen_random_uuid(),
-  user_id    uuid not null default auth.uid() references public.profiles(id) on delete cascade,
-  source     text not null check (source in ('chrome_html','chrome_api','gmail_tldr','json')),
-  total      int not null default 0,
-  inserted   int not null default 0,
-  duplicates int not null default 0,
-  created_at timestamptz not null default now()
-);
-
-create table public.links (
-  id                 uuid primary key default gen_random_uuid(),
-  user_id            uuid not null default auth.uid() references public.profiles(id) on delete cascade,
-  original_url       text not null,
-  normalized_url     text not null check (length(normalized_url) <= 2048),
-  canonical_url      text,
-  domain             text not null,
-  title              text not null default '' check (length(title) <= 500),
-  description        text check (length(description) <= 2000),
-  image_url          text,
-  category_slug      text not null references public.categories(slug),
-  suggested_category text references public.categories(slug),
-  note               text check (length(note) <= 2000),
-  content_hash       text,             -- fase 4
-  is_read            boolean not null default false,  -- fase 3
-  is_favorite        boolean not null default false,  -- fase 3
-  import_batch_id    uuid references public.import_batches(id) on delete set null,
-  created_at         timestamptz not null default now(),
-  updated_at         timestamptz not null default now(),
-  constraint links_user_normalized_url_key unique (user_id, normalized_url)
-);
-
-create table public.tags (
-  id      uuid primary key default gen_random_uuid(),
-  user_id uuid not null default auth.uid() references public.profiles(id) on delete cascade,
-  slug    text not null check (slug ~ '^[a-z0-9-]{1,32}$'),
-  name    text not null,
-  constraint tags_user_slug_key unique (user_id, slug)
-);
-
-create table public.link_tags (
-  link_id uuid not null references public.links(id) on delete cascade,
-  tag_id  uuid not null references public.tags(id) on delete cascade,
-  primary key (link_id, tag_id)
-);
+```json
+// users/Xk3…/links/9f2c…e41a
+{
+  "url": "https://tracking.tldrnewsletter.com/CL0/https:%2F%2Fgithub.com%2Flangchain-ai%2Flanggraph%3Futm_source=tldrai/1/0100…",
+  "normalizedUrl": "https://github.com/langchain-ai/langgraph",
+  "canonicalUrl": "https://github.com/langchain-ai/langgraph",
+  "title": "LangGraph: build resilient language agents as graphs",
+  "description": "Build resilient language agents as graphs.",
+  "imageUrl": "https://opengraph.githubassets.com/…/langchain-ai/langgraph",
+  "domain": "github.com",
+  "category": "projects",
+  "suggestedCategory": "projects",
+  "tags": ["ia", "agentes"],
+  "keywords": ["langgraph", "build", "resilient", "language", "agents", "graphs", "lan", "ang", "ngg", "…"],
+  "status": "unread",
+  "favorite": false,
+  "source": "tldr",
+  "metaStatus": "ok",
+  "note": null,
+  "importBatchId": null,
+  "createdAt": "2026-11-02T18:40:00Z",
+  "updatedAt": "2026-11-02T18:40:00Z"
+}
 ```
+
+### Por qué el ID es el hash de la URL normalizada
+- Firestore no ofrece restricciones de unicidad. Con un ID aleatorio, dos guardados concurrentes (popup + menú contextual, o web + extensión) podrían crear dos documentos para la misma URL.
+- Con `linkId = sha256Hex(normalizedUrl)` ambos clientes calculan **el mismo ID**; el segundo `create` falla (transacción o regla `!exists`) y el duplicado exacto es **imposible por construcción**.
+- Verificar si ya existe cuesta **una lectura** (`getDoc`), sin índices.
+- SHA-256 en hex evita caracteres prohibidos en IDs (`/`) y longitudes > 1 500 bytes.
+- Si cambia el algoritmo de normalización (nueva regla de tracking), se ejecuta una **migración en el cliente** (Fase 2, pantalla de mantenimiento): recalcula IDs y fusiona colisiones (conserva `createdAt` más antiguo y une etiquetas).
+
+### Campo `keywords`
+Generado por `buildKeywords(title)` en core:
+1. `lower` + quitar acentos (`normalize('NFD')` y quitar diacríticos) + quitar puntuación.
+2. Tokens de ≥ 3 caracteres que no sean *stopwords* (lista ES+EN).
+3. Trigramas de los primeros tokens (con relleno `  x`), deduplicados, hasta completar 60 elementos.
+
+Usos: búsqueda aproximada con `where('keywords','array-contains-any', [...hasta 30 valores])` cuando no se tiene la colección en memoria, y comparación Jaccard rápida para duplicados cercanos.
+
+## Documento `users/{uid}`
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `displayName`, `email`, `photoURL` | string | Copiados del perfil de Google al primer login (solo lectura en la UI) |
+| `defaultCategory` | string | Categoría si la confianza es baja (por defecto `webpages`) |
+| `theme` | string | `system`, `light` o `dark` |
+| `similarityThresholds` | map | `{ probable: 0.8, possible: 0.6 }` (ajustable, ver [normalizacion-y-duplicados.md](normalizacion-y-duplicados.md)) |
+| `normalizerVersion` | number | Versión del normalizador con la que se generaron los IDs; dispara la migración |
+| `createdAt`, `updatedAt` | timestamp | |
+
+## Categorías: configuración fija en `@linkshelf/core`
+
+**Decisión:** las categorías son una constante versionada en `packages/core/src/categories.ts`, **no** una subcolección `users/{uid}/categories`.
+
+```ts
+export const CATEGORIES = [
+  { slug: 'articulos',  name: 'Artículos',  icon: 'science',   order: 1 },
+  { slug: 'tutoriales', name: 'Tutoriales', icon: 'school',    order: 2 },
+  { slug: 'projects',   name: 'Projects',   icon: 'code',      order: 3 },
+  { slug: 'webpages',   name: 'WebPages',   icon: 'language',  order: 4 },
+  { slug: 'ia',         name: 'IA',         icon: 'smart_toy', order: 5 },
+  { slug: 'diseno',     name: 'Diseño',     icon: 'palette',   order: 6 },
+] as const;
+export type CategorySlug = (typeof CATEGORIES)[number]['slug'];
+```
+
+Justificación:
+- El conjunto es pequeño y estable, y las **reglas de categorización** (ver [categorizacion.md](categorizacion.md)) dependen de los slugs: tenerlos en código permite tipado exhaustivo y tests.
+- **Cero lecturas** extra por sesión y sin estado inconsistente entre web y extensión.
+- Las Security Rules validan `category in ['articulos', …]` sin leer otro documento (un `get()` en reglas cuesta una lectura facturable).
+- La personalización que el usuario necesita (subtemas, "ia" dentro de un tutorial) ya la dan las **etiquetas libres**.
+- Si en el futuro se quisieran categorías propias, se añadiría `users/{uid}/categories` y se relajaría la regla; queda documentado como posible Fase 5.
+
+## Etiquetas
+No hay colección de etiquetas: viven en el arreglo `tags` de cada enlace. La lista para autocompletar y los contadores se derivan en el cliente del listener en memoria (`Map<tag, count>`). Renombrar una etiqueta = `writeBatch` que actualiza los enlaces afectados (≤ 500 por lote).
 
 ## Índices
 
-```sql
-create index links_user_created_idx  on public.links (user_id, created_at desc);
-create index links_user_category_idx on public.links (user_id, category_slug);
-create index links_user_domain_idx   on public.links (user_id, domain);
-create index links_canonical_idx     on public.links (user_id, canonical_url);
-create index links_title_trgm_idx    on public.links
-  using gin (public.f_unaccent(lower(title)) gin_trgm_ops);
-create index links_content_hash_idx  on public.links (user_id, content_hash)
-  where content_hash is not null;
-create index link_tags_tag_idx       on public.link_tags (tag_id);
--- Fase 4: full-text
--- alter table public.links add column fts tsvector generated always as (
---   setweight(to_tsvector('simple', public.f_unaccent(coalesce(title,''))), 'A') ||
---   setweight(to_tsvector('simple', public.f_unaccent(coalesce(description,''))), 'B')) stored;
--- create index links_fts_idx on public.links using gin (fts);
+Firestore crea índices de campo único automáticamente. Índices compuestos en `firebase/firestore.indexes.json`:
+
+| Colección | Campos | Uso |
+|---|---|---|
+| `links` | `category` ASC, `createdAt` DESC | Lista filtrada por categoría |
+| `links` | `status` ASC, `createdAt` DESC | Pendientes de leer |
+| `links` | `favorite` ASC, `createdAt` DESC | Favoritos |
+| `links` | `tags` ARRAY_CONTAINS, `createdAt` DESC | Filtro por etiqueta |
+| `links` | `domain` ASC, `createdAt` DESC | Candidatos a duplicado cercano y filtro por dominio |
+
+Exenciones (para ahorrar almacenamiento de índices): `description`, `note`, `imageUrl`, `url` y `canonicalUrl` sin índice de campo único (no se consultan).
+
+```json
+{
+  "indexes": [
+    { "collectionGroup": "links", "queryScope": "COLLECTION",
+      "fields": [ { "fieldPath": "category", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "links", "queryScope": "COLLECTION",
+      "fields": [ { "fieldPath": "domain", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] }
+  ],
+  "fieldOverrides": [
+    { "collectionGroup": "links", "fieldPath": "description", "indexes": [] },
+    { "collectionGroup": "links", "fieldPath": "note", "indexes": [] }
+  ]
+}
 ```
 
-## Triggers
-
-```sql
-create or replace function public.set_updated_at() returns trigger
-language plpgsql as $$ begin new.updated_at = now(); return new; end $$;
-
-create trigger links_updated_at before update on public.links
-  for each row execute function public.set_updated_at();
-
--- Crear perfil al registrarse
-create or replace function public.handle_new_user() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  insert into public.profiles (id, display_name)
-  values (new.id, coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)));
-  return new;
-end $$;
-
-create trigger on_auth_user_created after insert on auth.users
-  for each row execute function public.handle_new_user();
-```
-
-## Políticas RLS
-
-```sql
-alter table public.profiles       enable row level security;
-alter table public.categories     enable row level security;
-alter table public.links          enable row level security;
-alter table public.tags           enable row level security;
-alter table public.link_tags      enable row level security;
-alter table public.import_batches enable row level security;
-
--- categories: catálogo global de solo lectura
-create policy "categories_read" on public.categories
-  for select to authenticated using (true);
-
--- profiles
-create policy "profiles_self_select" on public.profiles
-  for select to authenticated using (id = (select auth.uid()));
-create policy "profiles_self_update" on public.profiles
-  for update to authenticated using (id = (select auth.uid())) with check (id = (select auth.uid()));
-
--- links, tags, import_batches: CRUD solo sobre lo propio
-create policy "links_owner_all" on public.links
-  for all to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
-create policy "tags_owner_all" on public.tags
-  for all to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
-create policy "import_batches_owner_all" on public.import_batches
-  for all to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
-
--- link_tags: ambos extremos deben pertenecer al usuario
-create policy "link_tags_owner_all" on public.link_tags
-  for all to authenticated
-  using (exists (select 1 from public.links l where l.id = link_id and l.user_id = (select auth.uid())))
-  with check (
-    exists (select 1 from public.links l where l.id = link_id and l.user_id = (select auth.uid()))
-    and exists (select 1 from public.tags t where t.id = tag_id and t.user_id = (select auth.uid()))
-  );
-```
-
-> `(select auth.uid())` se evalúa una vez por consulta (recomendación de rendimiento de Supabase). El rol `anon` no tiene ninguna política: sin sesión no se lee nada.
+## Escrituras atómicas
+- **Crear:** `runTransaction` → `get(ref)`; si existe → `exact`; si no → `set(ref, data)`. Las reglas además exigen que en `create` el documento no exista (`set` sobre existente es `update` y no pasa la validación de `createdAt` inmutable).
+- **Editar:** `updateDoc` con lista blanca de campos editables (`title`, `category`, `tags`, `status`, `favorite`, `note`, `description`, `imageUrl`, `metaStatus`, `canonicalUrl`, `updatedAt`).
+- **Cambiar URL**: no se permite editar `normalizedUrl`; se crea un documento nuevo y se borra el anterior en un `writeBatch`.
+- **Borrar cuenta:** el cliente borra `links` por lotes de 500 y luego `users/{uid}`; después `deleteUser()` en Auth.
 
 ## Notas de diseño
-- **Categoría como tabla** (no enum) para poder añadir categorías sin migrar tipos; slugs ASCII (`diseno`, `articulos`) y nombres visibles con tilde.
-- **Etiquetas por usuario** con `slug` único; la UI puede ofrecer etiquetas homónimas a categorías (`ia`, `diseno`) para el modelo principal + secundarias.
-- `original_url` se conserva para auditoría y para depurar la normalización.
-- `domain` se guarda sin `www.` para filtrar por sitio.
-- Tamaño estimado por fila ≈ 1-2 KB + índices.
+- `createdAt`/`updatedAt` siempre con `serverTimestamp()` para que el orden no dependa del reloj del dispositivo.
+- Los convertidores (`FirestoreDataConverter<Link>`) en `@linkshelf/firebase` validan con `zod` al leer, para tolerar documentos antiguos.
+- Exportación: botón *Exportar JSON* que serializa el listener en memoria (sin costo extra de lecturas). Respaldo programado: ver [despliegue-y-ci.md](despliegue-y-ci.md).

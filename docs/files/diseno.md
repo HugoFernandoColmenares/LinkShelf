@@ -12,7 +12,7 @@
 
 | # | Ruta | Pantalla | Contenido |
 |---|---|---|---|
-| P1 | `/login` | Inicio de sesión | Email (magic link / OTP) y botón GitHub |
+| P1 | `/login` | Inicio de sesión | Botón *Continuar con Google* (Firebase Auth) |
 | P2 | `/links` | Biblioteca (principal) | Sidebar de categorías con conteos, barra de búsqueda, chips de filtros, lista/tarjetas |
 | P3 | `/links/new` | Guardar enlace | Pegar URL → misma lógica que el popup |
 | P4 | `/links/:id` | Detalle / edición | Metadatos, categoría, etiquetas, nota, URL original vs. normalizada |
@@ -93,7 +93,7 @@ flowchart TD
 | `--ls-warning` | `#b45309` | `#fbbf24` | Aviso de duplicado |
 | `--ls-danger` | `#b91c1c` | `#f87171` | Eliminar |
 
-Colores de categoría: los de la tabla `categories` (siempre acompañados de texto, nunca solo color). Tema claro/oscuro según `prefers-color-scheme` con selector manual.
+Colores de categoría: los de la configuración `CATEGORIES` de `@linkshelf/core` (siempre acompañados de texto, nunca solo color). Tema claro/oscuro según `prefers-color-scheme` con selector manual.
 
 ### Tipografía
 - **Inter** (variable) para UI, **JetBrains Mono** para URLs; ambas en Google Fonts / autohospedadas.

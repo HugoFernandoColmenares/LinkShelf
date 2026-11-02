@@ -2,55 +2,80 @@
 
 # Stack y servicios
 
-Restricción principal: **costo $0**. Todo cabe en free tiers.
+Objetivo de costo: **$0/mes, sin tarjeta de crédito registrada**. Toda la lógica de negocio vive en el cliente (paquete `@linkshelf/core`), y Firebase solo aporta identidad, base de datos y reglas de acceso.
 
 ## Stack elegido
 
-| Capa | Elección | Justificación |
+| Capa | Tecnología | Por qué |
 |---|---|---|
-| Web | **Angular 22**, standalone components, signals, zoneless, TS strict | Stack principal de Hugo; signals + zoneless dan rendimiento y código simple; standalone elimina NgModules |
-| UI | Angular CDK + CSS propio con variables (o Angular Material 3 si se prefiere rapidez) | Ligero, accesible, sin licencias |
-| Extensión | **WXT** (Vite) + TS, Manifest V3 | Un solo código para Chrome, Edge, Brave y Firefox; HMR; empaquetado zip por navegador. CRXJS es más acotado a Chrome y con mantenimiento irregular |
-| BD | **Supabase Postgres** + `pg_trgm` + `unaccent` | SQL real, índices trigram para dedupe/búsqueda difusa, RLS nativa |
-| Auth | **Supabase Auth**: magic link + GitHub OAuth | Gratis, integrado con RLS (`auth.uid()`) |
-| Lógica de red | **Supabase Edge Function** `normalize-link` (Deno) | Evita CORS, ejecuta redirecciones y parseo de HTML cerca de la BD |
-| Lógica compartida | `@linkshelf/core` en **pnpm workspaces** | Una sola fuente del normalizador y las reglas |
-| Hosting web | **Vercel Hobby** | Deploy por push, previews por PR, HTTPS, $0 |
-| Tests | **Vitest** (unit), **Playwright** (e2e) | Rápidos, TS nativo; Vitest también es el runner soportado por Angular moderno |
-| CI | **GitHub Actions** | Gratis, integra con Vercel y Supabase CLI |
-| Lint/format | ESLint (angular-eslint, typescript-eslint) + Prettier | Estándar |
+| Web app | **Angular 22** (standalone, signals, zoneless), TypeScript strict | Experiencia previa, tipado fuerte, SSR innecesario (app privada tras login) |
+| Extensión | **WXT** (Vite) + Manifest V3 + TypeScript | Un solo código para Chrome, Edge, Brave y Firefox; HMR en desarrollo |
+| Identidad | **Firebase Authentication** con proveedor Google | Gratis e ilimitado para proveedores sociales en Spark; el usuario ya usa Gmail (fuente de TLDR) |
+| Base de datos | **Cloud Firestore (edición Standard)** en modo nativo | Documento por enlace, SDK con caché offline, Security Rules declarativas, plan Spark sin pausas |
+| Autorización | **Firestore Security Rules** | Aíslan los datos por `uid` y validan esquema sin servidor propio |
+| Lógica de dominio | **`@linkshelf/core`** (TypeScript puro, sin dependencias de DOM ni de Firebase) | Normalización, desenvolvedor de redirecciones TLDR, hash de ID, similitud de títulos, reglas de categoría; se ejecuta igual en web, extensión y tests |
+| SDK | **Firebase JS SDK v11+ modular** (`firebase/app`, `firebase/auth/web-extension`, `firebase/firestore`) | Tree-shaking; build específica para extensiones MV3 |
+| Hosting web | **Vercel Hobby** (alternativa: Firebase Hosting, también gratis en Spark) | Previews por PR y deploy desde GitHub sin configuración extra |
+| Monorepo | **pnpm workspaces** | Instalación rápida, `workspace:*` para `core` |
+| Testing | **Vitest**, **Firebase Emulator Suite** + **`@firebase/rules-unit-testing`**, **Playwright** | Ver [testing.md](testing.md) |
+| CI/CD | **GitHub Actions** | Gratis en repo público |
 
-## Límites de free tiers y mitigaciones
+### Lo que **no** se usa y por qué
+- **Cloud Functions / Cloud Run / Extensions de Firebase**: requieren plan **Blaze** (tarjeta). La resolución de redirecciones y metadatos se hace en la extensión (ver [normalizacion-y-duplicados.md](normalizacion-y-duplicados.md)).
+- **Cloud Storage for Firebase**: desde 2024 los buckets nuevos exigen Blaze; no hace falta (las miniaturas son URLs `og:image` externas).
+- **Firestore edición Enterprise / búsqueda vectorial / full-text nativo**: fuera del plan gratuito o inexistentes; la búsqueda se hace en el cliente.
 
-| Servicio | Límite relevante (verificar en la web oficial; cambian) | Impacto | Mitigación |
+## Plan Spark: cuotas y estimación de uso
+
+Cuotas gratuitas diarias de Cloud Firestore (se reinician a medianoche hora del Pacífico) y mensuales:
+
+| Recurso | Cuota Spark | Uso estimado de LinkShelf | % de la cuota |
 |---|---|---|---|
-| Supabase Free | El proyecto se **pausa tras 1 semana sin actividad** | La app deja de responder | Workflow semanal de GitHub Actions que hace un `select` liviano (keep-alive); reactivación manual desde el dashboard si ocurre |
-| Supabase Free | **500 MB** de base de datos | ~1 KB/enlace + índices ≈ 3 KB → >100 000 enlaces | No guardar HTML; `og:image` solo como URL; `pg_dump` mensual |
-| Supabase Free | 2 proyectos activos máx. | Ninguno | Un proyecto prod; desarrollo con `supabase start` local |
-| Supabase Free | Edge Functions: cuota mensual de invocaciones (~500 000) | Muy holgado para un usuario | Debounce en popup; caché por `normalized_url` 24 h en la función; importaciones masivas por lotes de 50 URLs por invocación |
-| Supabase Free | 50 000 MAU, emails de Auth con límite por hora del SMTP por defecto | Magic links limitados | Preferir GitHub OAuth; SMTP propio gratuito si hiciera falta |
-| Supabase Free | Sin backups automáticos descargables (PITR es de pago) | Riesgo de pérdida | `supabase db dump` programado en Actions como artefacto privado |
-| Vercel Hobby | Uso no comercial, 100 GB de ancho de banda | Ninguno | App estática (SPA) |
-| GitHub Actions | 2 000 min/mes en privados (ilimitado en públicos) | Ninguno | Caché de pnpm, jobs con `paths` filter |
-| Chrome Web Store | Registro de desarrollador USD 5 (pago único) | Rompe $0 | **Opcional**: cargar la extensión "sin empaquetar"; Firefox AMO y Edge Add-ons son gratuitos |
+| Almacenamiento | 1 GiB | 5 000 enlaces × ~2 KB (con keywords e índices) ≈ 10–15 MB | ~1,5 % |
+| Lecturas de documentos | 50 000 / día | Carga inicial ~3 000 docs una vez + caché persistente → 200–800 lecturas/día en régimen | ≤ 2 % |
+| Escrituras | 20 000 / día | 10–50 enlaces guardados/editados al día | < 0,3 % |
+| Borrados | 20 000 / día | Decenas | < 0,1 % |
+| Transferencia de red saliente | 10 GiB / mes | < 50 MB/mes | < 1 % |
+| Auth (Google) | Sin límite práctico para proveedores sociales | 1 usuario | — |
 
-**Costo total mensual: $0.**
+**Picos previstos:** la importación de favoritos de la Fase 2 (p. ej. 3 000 enlaces) cuesta ~3 000 escrituras + ~3 000 lecturas de verificación de duplicados: un solo día al 15 % de la cuota. Se hace en lotes (`writeBatch` de hasta 500 operaciones) y puede repartirse en varios días si se importan más de ~15 000.
+
+**Qué pasa si se excede:** en Spark no hay cobro; Firestore responde `RESOURCE_EXHAUSTED` hasta el reinicio diario. La UI muestra "Cuota diaria agotada, intenta mañana" y la caché local sigue permitiendo leer.
+
+### Mitigaciones para mantener las lecturas bajas
+- **Persistencia offline** (`persistentLocalCache` + `persistentMultipleTabManager` en la web; caché en IndexedDB en el documento offscreen o popup de la extensión): las relecturas de documentos sin cambios salen de la caché.
+- **Listener en tiempo real con `onSnapshot`** sobre la colección del usuario: tras la carga inicial solo se cobran los documentos que cambian.
+- **Paginación** con `limit(50)` + `startAfter` en la lista, y filtros (`where('category','==',…)`) para no traer la colección completa en móvil.
+- **Detección de duplicados acotada**: una `getDoc` por ID (1 lectura) + una consulta `where('domain','==',d)` limitada a 100 docs, normalmente servida desde caché.
+- Nada de `count()` repetitivos: los contadores por categoría se calculan del listener en memoria.
+
+### Diferencia clave con otros free tiers
+- **No hay pausa por inactividad**: un proyecto Spark sin uso durante semanas sigue disponible; no hace falta workflow de *keep-alive*.
+- Sin tarjeta, no hay riesgo de factura sorpresa: el peor caso es un corte temporal hasta el día siguiente.
+
+### App Check (opcional)
+Firebase App Check con **reCAPTCHA Enterprise** (gratis hasta 10 000 evaluaciones/mes) en la web reduce el abuso de la configuración pública. En extensiones MV3 no hay proveedor oficial; se puede usar un *custom provider* o simplemente no aplicar *enforcement* a Firestore. Para un proyecto personal es opcional: las Security Rules ya impiden acceso a datos ajenos.
 
 ## Alternativas consideradas
 
-| Alternativa | Por qué no |
-|---|---|
-| **Firebase (Firestore + Auth)** | NoSQL sin índices trigram ni `unique` compuesto real; dedupe difuso requeriría servicio externo (Algolia, de pago); Cloud Functions exige plan Blaze con tarjeta |
-| **Raindrop.io / Pocket / Linkwarden** (herramientas existentes) | Raindrop: dedupe y funciones avanzadas en plan Pro de pago, sin control de las reglas de TLDR; Pocket fue descontinuado; Linkwarden requiere autohospedaje o pago. Además es un proyecto de portafolio |
-| **PocketBase** | Excelente y simple, pero requiere hospedar un servidor (no hay free tier gestionado estable) y SQLite no trae `pg_trgm` |
-| **`chrome.storage.sync`** | Cuota ~100 KB y 512 ítems; atado a Chrome; sin consultas |
-| **Neon + backend propio** | Más piezas (auth, API) que mantener |
-| **CRXJS** | Enfocado en Chrome; WXT cubre Firefox con el mismo código |
-| **Netlify / Cloudflare Pages** | Equivalentes válidos; Vercel ya lo usa Hugo y tiene buen soporte Angular |
+| Opción | Decisión | Motivo |
+|---|---|---|
+| **Firebase Spark (Firestore + Auth)** | ✅ Elegida | $0 sin tarjeta, sin pausas, SDK con caché offline, reglas declarativas suficientes para un modelo por usuario |
+| **Supabase Free (Postgres + Auth + Edge Functions)** | ❌ Descartada | El plan gratuito permite solo **dos proyectos activos** y ambos ya están ocupados por otros proyectos del usuario; además los proyectos gratuitos se **pausan tras 7 días sin actividad**, lo que obligaba a un workflow de keep-alive |
+| Firebase Blaze | ❌ | Requiere tarjeta; solo se justificaría para Cloud Functions, que no son necesarias |
+| Appwrite Cloud Free | ❌ | Viable, pero menor madurez del SDK para extensiones MV3 y comunidad más pequeña |
+| PocketBase autohospedado | ❌ | Requiere servidor siempre encendido (costo o mantenimiento) |
+| Turso / Neon + backend propio | ❌ | Obliga a escribir y hospedar una API y la autenticación |
+| `chrome.storage.sync` solamente | ❌ | Límite de ~100 KB y atado a la cuenta del navegador; no sirve como fuente de verdad multi-navegador |
 
 ## Servicios a configurar
-1. Proyecto Supabase `linkshelf` (región más cercana: `us-east-1` o `sa-east-1`).
-2. OAuth App de GitHub (callback `https://<ref>.supabase.co/auth/v1/callback`).
-3. Proyecto Vercel apuntando a `apps/web`.
-4. Repositorio GitHub con secrets (ver [despliegue-y-ci.md](despliegue-y-ci.md)).
-5. (Fase 3) Proyecto Google Cloud con Gmail API, scope `gmail.readonly`.
+
+1. **Proyecto Firebase** en <https://console.firebase.google.com> (plan Spark por defecto; **no** vincular cuenta de facturación). Desactivar Google Analytics (no se usa).
+2. **Firestore**: crear base `(default)` en modo producción, edición **Standard**, ubicación `nam5` (EE. UU. multirregión) o `southamerica-east1` (São Paulo) para menor latencia desde Colombia. La ubicación no se puede cambiar después.
+3. **Authentication** → *Sign-in method* → habilitar **Google**. En *Settings → Authorized domains* añadir el dominio de Vercel (`linkshelf.vercel.app` y el dominio propio si existe). Para previews de Vercel ver [despliegue-y-ci.md](despliegue-y-ci.md).
+4. **Google Cloud Console** (mismo proyecto) → *APIs y servicios → Credenciales*: el client ID OAuth web que crea Firebase; añadir `https://<extension-id>.chromiumapp.org/` como *URI de redireccionamiento autorizado* para la extensión (ver [extension-navegador.md](extension-navegador.md)).
+5. **App web** registrada en *Project settings → Your apps* → copiar la config a `.env` (ver `.env.example`).
+6. **Firebase CLI** (`pnpm add -D firebase-tools`): `firebase login`, `firebase use --add`, y despliegue de `firestore.rules` y `firestore.indexes.json`.
+7. **Restringir la API key** en Google Cloud Console: limitar a las APIs *Identity Toolkit*, *Token Service* y *Cloud Firestore* y, para la web, a los *HTTP referrers* del dominio.
+8. **Vercel**: importar el repo, raíz `apps/web`, variables `NG_APP_*`.
+9. **Alertas**: Firebase Console → *Usage and billing* para revisar el consumo diario (en Spark no hay alertas de presupuesto; se revisa manualmente una vez al mes).

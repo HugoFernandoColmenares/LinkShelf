@@ -4,7 +4,7 @@
 
 ## Idioma
 - Documentación, commits, PRs e interfaz: **español (Latinoamérica)**.
-- Código (variables, funciones, tablas, columnas): **inglés**. Slugs de categoría en español ASCII (`diseno`, `articulos`).
+- Código (variables, funciones, colecciones, campos): **inglés**. Slugs de categoría en español ASCII (`diseno`, `articulos`).
 
 ## Ramas (GitHub Flow simplificado)
 - `main`: siempre desplegable; protegida (PR + CI verde).
@@ -32,9 +32,9 @@ Ejemplos:
 ```
 feat(core): elimina parámetros de rastreo de mailchimp
 fix(ext): evita doble guardado desde el menú contextual
-feat(db)!: cambia categories a tabla con slug
+feat(core)!: cambia el algoritmo de ID de enlaces
 
-BREAKING CHANGE: el enum category_type se reemplaza por la tabla categories.
+BREAKING CHANGE: los IDs se recalculan; requiere migración con normalizerVersion 2.
 ```
 Validado con `commitlint` + `husky` (`commit-msg`).
 
@@ -42,7 +42,7 @@ Validado con `commitlint` + `husky` (`commit-msg`).
 - TypeScript `strict: true`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`.
 - Prettier: 2 espacios, comillas simples, `printWidth` 100, trailing commas.
 - ESLint: `typescript-eslint` estricto, `angular-eslint`, sin `any` explícito.
-- Nombres: `camelCase` variables/funciones, `PascalCase` tipos/clases, `kebab-case` archivos, `snake_case` en SQL.
+- Nombres: `camelCase` variables/funciones, `PascalCase` tipos/clases, `kebab-case` archivos, `camelCase` en campos de Firestore.
 - Prefijo de selectores Angular: `ls-`.
 
 ### Angular
@@ -52,9 +52,9 @@ Validado con `commitlint` + `husky` (`commit-msg`).
 - Componentes presentacionales en `shared/ui`, inteligentes en `features/*`.
 - Prohibido `innerHTML` con datos de enlaces.
 
-### SQL
-- Una migración por cambio lógico, nombres descriptivos (`<timestamp>_add_link_tags.sql`).
-- Toda tabla nueva: `enable row level security` + políticas + test pgTAP.
+### Firestore
+- Rutas en plural y `camelCase` (`users/{uid}/importBatches`); IDs deterministas cuando haya clave natural.
+- Toda colección nueva: bloque `match` explícito en `firestore.rules` + validación de esquema + tests con `@firebase/rules-unit-testing`.
 
 ### Extensión
 - `browser.*` (WXT) en lugar de `chrome.*`.

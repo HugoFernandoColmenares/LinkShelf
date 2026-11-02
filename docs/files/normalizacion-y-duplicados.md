@@ -2,7 +2,7 @@
 
 # Normalización de URLs y detección de duplicados
 
-Implementado en `packages/core/src/normalize.ts` (puro, determinista) y complementado por la Edge Function `normalize-link` (red).
+Todo se implementa en el cliente, en `@linkshelf/core` (`packages/core/src/normalize.ts`, `unwrap.ts`, `similarity.ts`): funciones puras y deterministas que usan igual la web, la extensión y los tests. **No hay Cloud Functions** (requieren el plan Blaze); los pasos que necesitan red solo los ejecuta la extensión.
 
 ## Algoritmo de normalización `normalizeUrl(input)`
 
@@ -11,10 +11,10 @@ Orden exacto (cada paso tiene tests):
 1. **Trim** de espacios y caracteres invisibles (`\u200B`, `\uFEFF`).
 2. **Parseo** con `new URL()`. Si no hay esquema, anteponer `https://`. Rechazar esquemas distintos de `http`/`https`.
 3. **Desenvolver redirecciones conocidas sin red** (wrappers con la URL destino embebida):
-   - `tracking.tldrnewsletter.com/CL0/<url-codificada>/...` → decodificar el segmento tras `CL0/`.
+   - `tracking.tldrnewsletter.com/CL0/<url-codificada>/<n>/<id>/<firma>` → tomar el segmento tras `CL0/` hasta el siguiente `/` **sin codificar** y aplicar `decodeURIComponent`. Funciona **sin red** porque la URL destino viaja dentro del enlace. `links.tldrnewsletter.com/<id>` (formato corto) sí requiere red.
    - `www.google.com/url?q=<url>`, `l.facebook.com/l.php?u=<url>`, `out.reddit.com/...?url=`, `t.co` (requiere red), `lnkd.in` (requiere red).
    - Se repite el paso (máx. 5) por si hay wrappers anidados.
-4. **Esquema**: forzar `https` (si el host es conocido por no soportar https, la Edge Function conserva `http` tras verificarlo).
+4. **Esquema**: forzar `https` (lista corta en core de hosts conocidos sin https que conservan `http`).
 5. **Host**: minúsculas, punycode→ASCII (lo hace `URL`), quitar `www.` y `m.` iniciales (solo `www.`, `www2.`, `m.`, `mobile.`), quitar punto final.
 6. **Puerto**: eliminar puertos por defecto (`:80`, `:443`).
 7. **Ruta**:
@@ -31,10 +31,21 @@ Orden exacto (cada paso tiene tests):
 10. **Reglas por dominio** (ver abajo: GitHub, YouTube, arXiv, Medium).
 11. Resultado: `URL.toString()`.
 
-### Pasos que requieren red (Edge Function)
-12. **Resolver redirecciones**: `fetch(url, { redirect: 'manual' })` en bucle, máx. 10 saltos, timeout total 5 s, `HEAD` primero y `GET` si el servidor no soporta `HEAD` (405/403). Cada salto vuelve a pasar por `normalizeUrl`.
-13. **Canonical**: leer `<link rel="canonical">` y `og:url` del `<head>` (primeros 512 KB). Se usa como `canonical_url` solo si es del **mismo dominio registrable** (evita canónicos falsos hacia dominios de terceros) y se normaliza también. Si es válido, `normalized_url` = canonical normalizado.
-14. **Protección SSRF**: rechazar hosts que resuelvan a IPs privadas, loopback, link-local o metadata (`169.254.169.254`).
+### Pasos que requieren red y límites de CORS
+
+Un navegador no deja que una página web lea la respuesta de otro origen sin cabeceras CORS, ni ver los saltos de una redirección (`redirect: 'manual'` devuelve una respuesta opaca). Por eso:
+
+| Contexto | Qué puede hacer | Qué no |
+|---|---|---|
+| **Extensión** (popup, service worker) con `host_permissions` opcionales `https://*/*` y `http://*/*` | `fetch(url, { redirect: 'follow' })` y leer `response.url` (URL final) y el HTML (primeros 512 KB) para título, `og:*` y `rel=canonical`. Sin CORS gracias a los permisos de host | Ver cada salto intermedio (no hace falta: basta la URL final) |
+| **Extensión** sin pedir permisos de host | Leer la **URL final de la pestaña** (`tab.url` con `activeTab`) cuando el usuario guarda la página que está viendo: el navegador ya siguió las redirecciones | Resolver enlaces que no se abrieron (menú contextual sobre un enlace) |
+| **Web app** | Desenvolver wrappers conocidos sin red (TLDR `CL0`, `google.com/url`, `l.facebook.com`) y normalizar | Seguir redirecciones o leer metadatos de terceros (CORS). Se guarda la URL tal cual con `metaStatus: 'pending'` |
+
+12. **Resolver redirecciones (extensión)**: `fetch` con `redirect: 'follow'`, `AbortSignal.timeout(5000)`, `HEAD` primero y `GET` si responde 405/403. La URL final vuelve a pasar por `normalizeUrl`. Si el permiso de host no fue concedido se usa la URL de la pestaña o se deja `pending`.
+13. **Canonical**: leer `<link rel="canonical">` y `og:url`. Se usa como `canonicalUrl` solo si es del **mismo dominio registrable** y se normaliza. Si es válido, `normalizedUrl` = canonical normalizado (y por tanto el ID se calcula sobre él).
+14. **Completar pendientes**: al abrir el popup o en segundo plano (alarma `chrome.alarms` cada 6 h, hasta 20 por ejecución), la extensión toma enlaces `metaStatus == 'pending'`, los resuelve y actualiza. Si la URL resuelta cambia el ID, se crea el documento nuevo y se borra el viejo en un `writeBatch` (o se fusiona si ya existía).
+
+**Seguridad:** el `fetch` corre en el navegador del usuario (no es un servidor que pueda sufrir SSRF), se envía sin cookies (`credentials: 'omit'`) y se rechazan hosts de redes privadas o `localhost` para no tocar la red local.
 
 ## Lista de parámetros de tracking (`tracking-params.ts`)
 
@@ -77,7 +88,7 @@ Lista blanca por dominio que **nunca** se toca: `youtube.com` (`v`, `t`, `list`)
 
 ## Ejemplos antes/después
 
-| # | Entrada | `normalized_url` |
+| # | Entrada | `normalizedUrl` |
 |---|---|---|
 | 1 | `https://www.Example.com/post/?utm_source=tldrnewsletter&utm_medium=email` | `https://example.com/post` |
 | 2 | `http://example.com:80/a//b/./c/index.html#section` | `https://example.com/a/b/c` |
@@ -94,20 +105,33 @@ Lista blanca por dominio que **nunca** se toca: `youtube.com` (`v`, `t`, `list`)
 
 ## Detección de duplicados
 
-Se calcula en la Edge Function (RPC `find_duplicates`) y localmente en la importación masiva.
+Se calcula en el cliente (`findNearDuplicates` en core) tanto al guardar uno a uno como en la importación masiva.
 
-| Señal | Puntaje | Nivel |
-|---|---|---|
-| `normalized_url` idéntica | 1,00 | `exact` (bloquea; `unique` en BD) |
-| `canonical_url` idéntica | 0,95 | `probable` |
-| `content_hash` idéntico (Fase 4) | 0,95 | `probable` |
-| Mismo dominio + `similarity(título) ≥ 0,80` | = similitud | `probable` |
-| `similarity(título) ≥ 0,60` (cualquier dominio) o mismo dominio y misma ruta sin query | = similitud × 0,9 | `possible` |
-| < 0,60 | — | `none` |
+| Señal | Puntaje | Nivel | Costo en Firestore |
+|---|---|---|---|
+| Mismo ID (`sha256Hex(normalizedUrl)`) | 1,00 | `exact` (bloquea: imposible por construcción) | 1 `getDoc` |
+| `canonicalUrl` idéntica a la de otro enlace del dominio | 0,95 | `probable` | incluida en la consulta por dominio |
+| `contentHash` idéntico (Fase 4) | 0,95 | `probable` | — |
+| Mismo dominio + `titleSimilarity ≥ 0,80` | = similitud | `probable` | consulta por dominio |
+| Mismo dominio + `titleSimilarity ≥ 0,60`, o misma ruta sin query | = similitud × 0,9 | `possible` (permite *Guardar igual*) | consulta por dominio |
+| < 0,60 | — | `none` | — |
 
-- Títulos se comparan con `f_unaccent(lower(title))`; se ignoran títulos < 8 caracteres o genéricos (`Home`, `GitHub`, `Untitled`).
-- Umbral de `pg_trgm` para el operador `%`: `set pg_trgm.similarity_threshold = 0.6` dentro de la RPC.
-- `duplicateLevel` de la respuesta = el mayor nivel entre los candidatos.
+### Algoritmo de similitud (`similarity.ts`)
+1. `normTitle(t)`: minúsculas, sin acentos, sin puntuación, espacios colapsados; se quitan sufijos de sitio (`" | Medium"`, `" - YouTube"`, `" · GitHub"`).
+2. Trigramas: para cada palabra con relleno `"  palabra "`, todas las subcadenas de 3 caracteres (esquema clásico de trigramas, implementado en TS).
+3. **Jaccard** = |A ∩ B| / |A ∪ B| sobre los conjuntos de trigramas.
+4. Se ignoran títulos < 8 caracteres o genéricos (`Home`, `GitHub`, `Untitled`, `Inicio`).
+
+```ts
+titleSimilarity('How to build a RAG app step by step', 'How to Build a RAG App, Step-by-Step | Medium'); // ≈ 0.93 → probable
+titleSimilarity('Attention is all you need', 'Attention in transformers explained');          // ≈ 0.35 → none
+```
+
+### Por qué solo dentro del mismo dominio
+- Mantiene la consulta acotada (`where('domain','==',d)`, ≤ 100 docs, casi siempre desde caché o desde el listener en memoria de la web).
+- Entre dominios distintos los títulos parecidos suelen ser artículos distintos sobre el mismo tema. La comparación global queda para la pantalla `/duplicates` (Fase 2), que opera sobre el arreglo completo en memoria sin lecturas extra.
+
+Los umbrales (`0,8` y `0,6`) son configurables en `users/{uid}.similarityThresholds`. `level` de la respuesta = el mayor nivel entre los candidatos.
 
 ### Comportamiento en UI
 - `exact`: "Ya guardaste este enlace el 14/10/2026 en *Tutoriales*" → botones *Ver existente* / *Actualizar etiquetas*.

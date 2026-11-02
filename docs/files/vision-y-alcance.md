@@ -28,7 +28,7 @@ LinkShelf es la "bahía" única donde terminan todos los enlaces que vale la pen
 - No sincroniza bidireccionalmente con los favoritos nativos del navegador; la importación es unidireccional.
 - No incluye app móvil nativa (la web es responsive).
 - No usa servicios de pago ni LLMs de pago.
-- Multiusuario soportado técnicamente (RLS), pero no se optimiza para equipos.
+- Multiusuario soportado técnicamente (Security Rules por `uid`), pero no se optimiza para equipos.
 
 ## Personas
 - **Hugo (usuario principal):** desarrollador full-stack, lee TLDR a diario, abre artículos en pestañas y quiere guardarlos rápido sin pensar en la carpeta.
@@ -45,7 +45,7 @@ LinkShelf es la "bahía" única donde terminan todos los enlaces que vale la pen
 | HU-07 | usuario | filtrar por categoría, etiqueta, dominio y fecha | encontrar rápido | MVP |
 | HU-08 | usuario | buscar por título/descripción tolerando acentos y errores | encontrar sin recordar el título exacto | MVP |
 | HU-09 | usuario | editar y eliminar enlaces | mantener la colección | MVP |
-| HU-10 | usuario | iniciar sesión con magic link o GitHub | acceder desde cualquier dispositivo | MVP |
+| HU-10 | usuario | iniciar sesión con mi cuenta de Google | acceder desde cualquier dispositivo | MVP |
 | HU-11 | usuario | importar mis favoritos de Chrome con dedupe masivo | migrar lo que ya tengo | Fase 2 |
 | HU-12 | usuario | importar los enlaces de mis correos TLDR | no copiar a mano | Fase 3 |
 | HU-13 | usuario | marcar leído/no leído y favorito | gestionar lo pendiente | Fase 3 |
@@ -53,13 +53,14 @@ LinkShelf es la "bahía" única donde terminan todos los enlaces que vale la pen
 | HU-15 | usuario | sugerencia de categoría por LLM gratuito | mejor precisión que las reglas | Fase 4 |
 
 ## MVP vs. posterior
-**MVP (Fase 1):** HU-01 a HU-10. Paquete core, esquema BD con RLS, Edge Function `normalize-link`, web app (lista, filtros, edición, login) y extensión (popup + menú contextual).
+**MVP (Fase 1):** HU-01 a HU-10. Paquete core (normalización, hash de ID, duplicados y categorías en el cliente), Firestore con Security Rules, Firebase Auth, web app (lista, filtros, edición, login) y extensión (popup + menú contextual).
 
 **Posterior:** importaciones (Fases 2-3), leído/favorito (3), full-text, LLM y hash de contenido (4). Ver [roadmap.md](roadmap.md).
 
 ## Supuestos y riesgos
 | Riesgo | Mitigación |
 |---|---|
-| Proyecto Supabase se pausa tras 7 días sin actividad | Uso diario + workflow de *keep-alive* semanal (ver [stack-y-servicios.md](stack-y-servicios.md)) |
+| Agotar la cuota diaria de Firebase Spark (p. ej. en una importación masiva) | Uso estimado < 5 % de la cuota; caché offline; importaciones en lotes repartibles en varios días (ver [stack-y-servicios.md](stack-y-servicios.md)) |
+| CORS impide a la web resolver redirecciones | La extensión resuelve con permisos de host; la web guarda la URL y marca metadatos pendientes |
 | Sitios que bloquean el fetch de metadatos | Fallback: usar `document.title` enviado por la extensión |
 | Cambios en el formato de tracking de TLDR | Lista de dominios de tracking configurable en `@linkshelf/core` + tests con ejemplos reales |

@@ -3,41 +3,59 @@
 # Despliegue y CI/CD
 
 ## Entornos
-| Entorno | Web | Supabase | Extensión |
+| Entorno | Web | Firebase | Extensión |
 |---|---|---|---|
-| Local | `pnpm --filter web dev` (localhost:4200) | `supabase start` (Docker) | `pnpm --filter extension dev` |
-| Preview | Vercel Preview por PR | Proyecto prod (solo lectura de datos propios) o local | artefacto zip del CI |
-| Producción | Vercel Production (`main`) | Proyecto `linkshelf` (Free) | Carga sin empaquetar / tiendas |
+| Local | `pnpm --filter web dev` (localhost:4200) | **Emulator Suite** (`firebase emulators:start`, proyecto `demo-linkshelf`) | `pnpm --filter extension dev` |
+| CI | build + e2e | Emuladores dentro del job (`firebase emulators:exec`) | artefacto zip |
+| Preview | Vercel Preview por PR | Proyecto de producción (cada usuario solo ve lo suyo) | artefacto zip del CI |
+| Producción | Vercel Production (`main`) | Proyecto `linkshelf` (plan **Spark**) | Carga sin empaquetar / tiendas |
 
-> El free tier permite 2 proyectos: se usa uno para producción; las pruebas van contra Supabase local.
+> En Spark se pueden tener varios proyectos gratuitos, pero no hace falta uno de staging: los emuladores cubren desarrollo y CI sin consumir cuota.
+
+## Configuración de Firebase en el repo
+
+`firebase.json`:
+```json
+{
+  "firestore": { "rules": "firebase/firestore.rules", "indexes": "firebase/firestore.indexes.json" },
+  "emulators": {
+    "auth": { "port": 9099 },
+    "firestore": { "port": 8080 },
+    "ui": { "enabled": true, "port": 4000 },
+    "singleProjectMode": true
+  }
+}
+```
+
+`.firebaserc`: `{ "projects": { "default": "linkshelf-<sufijo>" } }`.
+
+```bash
+pnpm add -D -w firebase-tools
+pnpm firebase login                      # una vez, local
+pnpm firebase use default
+pnpm firebase emulators:start            # Auth + Firestore + UI en :4000
+pnpm firebase deploy --only firestore:rules,firestore:indexes
+```
+- `firestore.rules` y `firestore.indexes.json` son la **única** fuente de verdad: nada de editar reglas en la consola.
+- No hay `functions` en `firebase.json` (requieren Blaze).
 
 ## Web en Vercel
 - Proyecto con *Root Directory* `apps/web`, framework *Angular*.
-- Build: `pnpm --filter web build` (desde la raíz con `installCommand: pnpm install --frozen-lockfile`).
+- Build: `pnpm --filter web build` (con `installCommand: pnpm install --frozen-lockfile`).
 - Output: `apps/web/dist/web/browser`.
 - `vercel.json`: rewrite SPA `/(.*) → /index.html` y headers de seguridad (ver [seguridad.md](seguridad.md)).
-- Variables `NG_APP_SUPABASE_URL`, `NG_APP_SUPABASE_ANON_KEY`, `NG_APP_SITE_URL` en Vercel (Production y Preview).
-- Integración Git de Vercel para previews automáticas; alternativamente `vercel deploy --prebuilt` desde Actions.
-- Añadir la URL de producción y `https://*-<team>.vercel.app` a *Redirect URLs* de Supabase Auth.
+- Variables `NG_APP_FIREBASE_*` y `NG_APP_SITE_URL` en Vercel (Production y Preview).
+- Firebase Auth → *Authorized domains*: `linkshelf.vercel.app` (y dominio propio). Firebase no acepta comodines, así que para probar login en previews se añade un **alias fijo de rama** (p. ej. `linkshelf-git-dev-<team>.vercel.app`) o se prueba el login solo en producción y local.
+- `authDomain`: usar `<project-id>.firebaseapp.com`. Con navegadores que bloquean cookies de terceros, `signInWithPopup` sigue funcionando; si se migra a `signInWithRedirect`, servir `/__/auth/*` desde el propio dominio con un rewrite de Vercel hacia `https://<project-id>.firebaseapp.com/__/auth/:path*` y usar el dominio de Vercel como `authDomain`.
 
-## Supabase
-```bash
-supabase init
-supabase link --project-ref $SUPABASE_PROJECT_REF
-supabase migration new init          # crea supabase/migrations/<timestamp>_init.sql
-supabase db reset                    # local: aplica migraciones + seed
-supabase db push                     # remoto (desde CI en main)
-supabase functions deploy normalize-link
-supabase secrets set NORMALIZE_USER_AGENT="LinkShelf/1.0"
-supabase gen types typescript --local > packages/core/src/database.types.ts
-```
-- Las migraciones son la única forma de cambiar el esquema (nada de cambios manuales en el dashboard).
-- Tipos generados se versionan y el CI verifica que estén al día (`git diff --exit-code`).
+### Alternativa: Firebase Hosting
+Gratis en Spark (10 GB de almacenamiento, 360 MB/día de transferencia). `firebase init hosting` con `public: apps/web/dist/web/browser` y rewrite SPA; canales de preview con `firebase hosting:channel:deploy pr-<n>` (dominios de preview autorizados automáticamente en Auth). Se mantiene Vercel por su integración Git, pero el cambio es directo si se prefiere todo en Firebase.
 
 ## Extensión
 - `pnpm --filter extension build` → `.output/chrome-mv3/`; `wxt zip` y `wxt zip -b firefox` generan zips.
 - **Uso personal ($0):** `chrome://extensions` → *Modo desarrollador* → *Cargar descomprimida*. Firefox: firmar como *unlisted* en AMO (gratis).
-- **Opcional:** Chrome Web Store (USD 5 único), Edge Add-ons (gratis), Firefox AMO (gratis). Publicación con `wxt submit` y secrets de cada tienda.
+- **Opcional:** Chrome Web Store (USD 5 único), Edge Add-ons (gratis), Firefox AMO (gratis). Publicación con `wxt submit`.
+- Fijar `key` en el manifest para que el ID (y la redirect URI `https://<id>.chromiumapp.org/` registrada en Google Cloud) no cambie.
 - Versionado: `version` del manifest sincronizada con `apps/extension/package.json`.
 
 ## GitHub Actions
@@ -67,56 +85,68 @@ jobs:
       - run: pnpm --filter extension build && pnpm --filter extension zip
       - uses: actions/upload-artifact@v4
         with: { name: extension, path: apps/extension/.output/*.zip }
-  db:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
-      - run: supabase start -x studio,imgproxy
-      - run: supabase test db
-  e2e:
-    needs: [quality, db]
+  rules:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
-      - uses: supabase/setup-cli@v1
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
       - run: pnpm install --frozen-lockfile
-      - run: supabase start -x studio,imgproxy && supabase functions serve &
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm --filter web e2e
-```
-
-### `deploy.yml` (push a `main`)
-1. `supabase db push` y `supabase functions deploy normalize-link` (secrets `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`).
-2. Vercel despliega por integración Git (o `vercel deploy --prod` con `VERCEL_TOKEN`).
-
-### `keep-alive.yml` (cron semanal)
-Evita la pausa por inactividad del free tier:
-```yaml
-on:
-  schedule: [{ cron: '0 14 * * 1' }]   # lunes 09:00 hora Bogotá
-  workflow_dispatch:
-jobs:
-  ping:
+      - run: pnpm test:rules          # firebase emulators:exec --only firestore --project demo-linkshelf
+  e2e:
+    needs: [quality, rules]
     runs-on: ubuntu-latest
     steps:
-      - run: >
-          curl -fsS "$SUPABASE_URL/rest/v1/categories?select=slug&limit=1"
-          -H "apikey: $SUPABASE_ANON_KEY"
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter web e2e    # firebase emulators:exec --only auth,firestore "playwright test"
 ```
-> Requiere una política de lectura de `categories` para `anon` o usar un endpoint de salud; alternativa: llamar a la Edge Function con un JWT de un usuario técnico.
+Los emuladores con proyecto `demo-*` no necesitan credenciales ni red hacia Firebase.
 
-### `backup.yml` (cron mensual)
-`supabase db dump --data-only` → artefacto privado (retención 90 días).
+### `deploy.yml` (push a `main` con cambios en `firebase/**`)
+```yaml
+name: Deploy Firestore
+on:
+  push:
+    branches: [main]
+    paths: ['firebase/**', 'firebase.json']
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
+      - run: pnpm firebase deploy --only firestore:rules,firestore:indexes --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+```
+La cuenta de servicio solo tiene los roles *Firebase Rules Admin* y *Cloud Datastore Index Admin*. Vercel despliega la web por su integración Git (o `vercel deploy --prod` con `VERCEL_TOKEN`).
+
+### Sin *keep-alive*
+A diferencia de otros free tiers, un proyecto Firebase Spark **no se pausa** por inactividad, así que no hay workflow de ping.
+
+### Respaldo
+- La exportación administrada (`gcloud firestore export`) necesita un bucket de Cloud Storage y, por tanto, Blaze: **no** se usa.
+- Respaldo manual: botón *Exportar JSON* en la web (usa el listener en memoria, 0 lecturas extra). Recomendado mensual.
+- Opcional `backup.yml` (cron mensual): script Node con `firebase-admin` que lee `users/*/links` (~3 000 lecturas, 6 % de la cuota de un día), cifra el JSON con `age` (clave pública en el repo, privada solo del usuario) y lo sube como artefacto con retención de 90 días. Cifrar es obligatorio porque el repositorio es público. Requiere añadir el rol *Cloud Datastore User* a una cuenta de servicio distinta.
 
 ## Secrets del repositorio
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (y de tiendas si se publica).
+`FIREBASE_SERVICE_ACCOUNT` (deploy de reglas/índices), `BACKUP_SERVICE_ACCOUNT` (opcional), `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (y de tiendas si se publica). La configuración web de Firebase no es secreta, pero se pasa como variables de Vercel para no duplicarla.
 
 ## Versionado y releases
 SemVer por app; tags `web-v1.0.0`, `extension-v1.0.0`; changelog generado desde commits convencionales (ver [convenciones.md](convenciones.md)).

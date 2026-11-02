@@ -3,7 +3,7 @@
 # Categorización
 
 ## Modelo: categoría principal + etiquetas secundarias
-- Cada enlace tiene **exactamente una** `category_slug` (para filtrar sin ambigüedad).
+- Cada enlace tiene **exactamente una** `category` (para filtrar sin ambigüedad).
 - Y **0..10 etiquetas** libres por usuario. Las categorías tienen etiqueta homónima sugerida (`ia`, `diseno`, `tutorial`…), de modo que "tutorial de IA" = categoría `tutoriales` + etiqueta `ia`, y filtrar por "IA" puede incluir opcionalmente enlaces etiquetados `ia` (toggle *Incluir etiquetas* en la UI).
 
 ## Definiciones
@@ -21,7 +21,7 @@
 
 ## Motor de reglas (`packages/core/src/categorize.ts`)
 
-Determinista, sin red, ejecutado en la Edge Function y en la extensión (fallback).
+Determinista, sin red, ejecutado **en el cliente** (web y extensión) desde `@linkshelf/core`; no hay Cloud Functions. Las categorías son una constante fija de core (ver [modelo-de-datos.md](modelo-de-datos.md#categorías-configuración-fija-en-linkshelfcore)).
 
 ```ts
 type Rule = {
@@ -42,7 +42,7 @@ type Rule = {
 1. Construir el contexto: `host`, `path`, `text = unaccent(lower(title + ' ' + description))`, `ogType`.
 2. Evaluar todas las reglas; cada regla que coincide suma `weight` a su categoría y añade sus etiquetas.
 3. Categoría = la de mayor puntaje; empates por orden de precedencia.
-4. `confidence = min(1, puntaje)`. Si `< 0.4` → sugerir `profiles.default_category` (por defecto `webpages`) y marcar baja confianza en la UI.
+4. `confidence = min(1, puntaje)`. Si `< 0.4` → sugerir `users/{uid}.defaultCategory` (por defecto `webpages`) y marcar baja confianza en la UI.
 5. Si la categoría ganadora es de formato (`projects`, `articulos`, `tutoriales`, `webpages`) y `ia` o `diseno` también puntuaron ≥ 0,4 → añadir esas como etiquetas.
 6. Devolver `reasons[]` legibles para la UI ("github.com → Projects").
 
@@ -78,10 +78,10 @@ Las reglas viven en un archivo de datos versionado; añadir una regla requiere u
 | `example.com/random` sin señales | — (confianza < 0,4) | default (`webpages`), baja confianza |
 
 ## Aprendizaje de correcciones (MVP+)
-Cuando el usuario cambia la sugerida, se guarda `suggested_category` ≠ `category_slug`. Una vista `category_corrections` agrupa por dominio; si un dominio acumula ≥ 3 correcciones a la misma categoría, la Edge Function la aplica como regla personal con peso 0,9 (tabla `user_domain_rules`, fase 3).
+Cuando el usuario cambia la sugerida, el documento queda con `suggestedCategory` ≠ `category`. El cliente agrupa esas correcciones por `domain` sobre el listener en memoria; si un dominio acumula ≥ 3 correcciones a la misma categoría, se escribe `users/{uid}/domainRules/{domain}` = `{ category, corrections }` y core la aplica como regla personal con peso 0,9 (Fase 3). Las reglas personales se leen una vez por sesión (decenas de documentos).
 
 ## Sugerencia con LLM (Fase 4, opcional)
 - Solo si `confidence < 0.6` y el usuario lo activa en ajustes.
-- Proveedores con tier gratuito (p. ej. Google Gemini API free tier, Groq, o Hugging Face Inference) llamados desde la Edge Function con `LLM_API_KEY` como secret de Supabase.
+- Proveedores con tier gratuito (p. ej. Google Gemini API free tier, Groq o Hugging Face Inference). Sin Cloud Functions no hay servidor donde guardar un secreto: el usuario pega **su propia** clave en *Opciones* de la extensión, se guarda solo en `chrome.storage.local` y la llamada sale desde la extensión. La web no usa LLM (la clave quedaría expuesta en el bundle).
 - Prompt con lista cerrada de slugs y salida JSON `{ "category": "...", "tags": [...] }`, validada contra el enum; si falla o excede cuota → se queda la sugerencia por reglas.
 - Se envían solo título, descripción y dominio (no el contenido completo) por privacidad y cuota.
