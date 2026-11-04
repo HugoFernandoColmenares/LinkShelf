@@ -22,6 +22,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/save/save-link-page').then((m) => m.SaveLinkPage),
       },
       {
+        path: 'import',
+        loadComponent: () => import('./features/import/import-page').then((m) => m.ImportPage),
+      },
+      {
         path: 'links/:id',
         loadComponent: () =>
           import('./features/detail/link-detail-page').then((m) => m.LinkDetailPage),

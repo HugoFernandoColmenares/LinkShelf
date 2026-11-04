@@ -39,6 +39,14 @@ export type {
   DuplicateThresholds,
   LinkSummary,
 } from './similarity';
+export {
+  draftBookmarkImport,
+  flattenBookmarkNodes,
+  folderKey,
+  parseBookmarkHtml,
+  suggestFolderCategory,
+} from './bookmarks';
+export type { BookmarkDraft, BookmarkDraftStatus, BookmarkNode, ParsedBookmark } from './bookmarks';
 export { slugifyTag, stripInvisible, unaccent } from './text';
 export { TRACKING_EXACT, TRACKING_PREFIXES, isTrackingParam } from './tracking-params';
 export { needsNetworkRedirect, unwrapKnownRedirects } from './unwrap';

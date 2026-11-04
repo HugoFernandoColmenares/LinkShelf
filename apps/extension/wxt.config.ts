@@ -9,6 +9,7 @@ export default defineConfig({
     name: 'LinkShelf',
     description: 'Guarda, limpia y categoriza enlaces sin duplicados.',
     permissions: ['activeTab', 'contextMenus', 'storage', 'notifications', 'identity', 'alarms'],
+    optional_permissions: ['bookmarks'],
     host_permissions: [
       'https://firestore.googleapis.com/*',
       'https://identitytoolkit.googleapis.com/*',

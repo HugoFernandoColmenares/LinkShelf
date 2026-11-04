@@ -1,0 +1,93 @@
+<section class="panel import-panel">
+  <p><a routerLink="/links">← Biblioteca</a></p>
+  <h1>Importar favoritos</h1>
+  <p class="muted">
+    Sube el archivo HTML que exporta el navegador. Chrome, Edge y Brave lo llaman favoritos;
+    Firefox, marcadores. LinkShelf quita los parámetros de rastreo, une las URLs equivalentes y te
+    deja asignar una categoría a cada carpeta.
+  </p>
+  <ul class="hint">
+    <li>Chrome o Brave: Favoritos → Administrar favoritos → menú → Exportar favoritos.</li>
+    <li>Edge: Favoritos → … → Exportar favoritos.</li>
+    <li>
+      Firefox: Marcadores → Administrar marcadores → Importar y respaldar → Exportar marcadores a
+      HTML.
+    </li>
+  </ul>
+  <label for="bookmark-file">Archivo HTML</label>
+  <input id="bookmark-file" type="file" accept=".html,text/html" (change)="onFile($event)" />
+
+  @if (error()) {
+    <p class="form-error" role="alert">{{ error() }}</p>
+  }
+  @if (report()) {
+    <p class="success" role="status">{{ report() }}</p>
+  }
+
+  @if (drafts().length) {
+    <p>
+      {{ counts().total }} enlaces: {{ counts().fresh }} nuevos, {{ counts().exact }} duplicados
+      exactos, {{ counts().near }} posibles, {{ counts().invalid }} omitidos.
+    </p>
+
+    <h2>Carpetas</h2>
+    <div class="folder-map">
+      @for (folder of folders(); track folder) {
+        <label>
+          {{ folder }}
+          <select [value]="folderValue(folder)" (change)="setFolder(folder, $event)">
+            @for (category of categories; track category.slug) {
+              <option [value]="category.slug">{{ category.name }}</option>
+            }
+          </select>
+        </label>
+      }
+    </div>
+
+    <label class="check">
+      <input
+        type="checkbox"
+        [checked]="includePossible()"
+        (change)="includePossible.set(!includePossible())"
+      />
+      Incluir posibles duplicados (Guardar igual)
+    </label>
+
+    <div class="table-wrap">
+      <table>
+        <caption>
+          Vista previa (hasta 40)
+        </caption>
+        <thead>
+          <tr>
+            <th>Título</th>
+            <th>URL limpia</th>
+            <th>Carpeta</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of preview(); track item.url + item.folderKey) {
+            <tr>
+              <td>{{ item.title }}</td>
+              <td class="mono">{{ item.normalizedUrl || item.reason }}</td>
+              <td>{{ item.folderKey }}</td>
+              <td>{{ statusLabel(item.status) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <button
+      type="button"
+      class="button button--primary"
+      [disabled]="busy() || (counts().fresh === 0 && !includePossible())"
+      (click)="confirm()"
+    >
+      Importar nuevos
+    </button>
+  } @else if (bookmarks().length === 0 && report() === null) {
+    <p class="hint">Todavía no hay un archivo cargado.</p>
+  }
+</section>
