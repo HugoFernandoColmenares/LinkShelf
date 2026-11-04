@@ -35,4 +35,22 @@ test('guarda un enlace limpio, filtra y avisa el duplicado', async ({ page }) =>
   await page.getByRole('button', { name: 'Revisar' }).click();
   await expect(page.getByText('Ya guardaste este enlace')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Ver existente' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Importar' }).click();
+  await page.setInputFiles('#bookmark-file', {
+    name: 'favoritos.html',
+    mimeType: 'text/html',
+    buffer: Buffer.from(`<!DOCTYPE NETSCAPE-Bookmark-file-1>
+      <DL><p>
+        <DT><H3>Tutoriales</H3>
+        <DL><p>
+          <DT><A HREF="https://example.com/post?utm_source=newsletter">Repetido</A>
+          <DT><A HREF="https://dev.to/guia?utm_medium=email">Guía nueva</A>
+        </DL><p>
+      </DL>`),
+  });
+  await expect(page.getByText('Duplicado exacto')).toBeVisible();
+  await expect(page.getByText('https://dev.to/guia')).toBeVisible();
+  await page.getByRole('button', { name: 'Importar nuevos' }).click();
+  await expect(page.getByText(/1 nuevos/)).toBeVisible();
 });

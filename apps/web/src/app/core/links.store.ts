@@ -119,4 +119,17 @@ export class LinksStore {
     if (!uid) throw new Error('Inicia sesión para eliminar.');
     await this.repo.remove(uid, id);
   }
+
+  uid(): string | null {
+    return this.auth.user()?.uid ?? null;
+  }
+
+  importMany(
+    report: { id: string; source: string; total: number; duplicates: number; failed: number },
+    items: Array<{ prepared: PreparedLink; category: CategorySlug }>,
+  ): Promise<number> {
+    const uid = this.auth.user()?.uid;
+    if (!uid) return Promise.reject(new Error('Inicia sesión para importar.'));
+    return this.repo.importMany(uid, report, items);
+  }
 }

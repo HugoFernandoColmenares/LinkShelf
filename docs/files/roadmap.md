@@ -54,8 +54,8 @@
 
 ## Fase 2 — Importar favoritos
 
-- [ ] Parser de HTML de favoritos (Netscape)
-- [ ] Importación vía `chrome.bookmarks` (permiso opcional)
+- [x] Parser de HTML de favoritos (Netscape) y pantalla web para mapear carpetas
+- [x] Importación vía `bookmarks` opcional en la extensión (permiso en tiempo de ejecución)
 - [ ] Mapeo carpeta → categoría
 - [ ] Dedupe masivo (mismo ID en el lote + existentes + similitud) con informe; `writeBatch` de 500
 - [ ] `users/{uid}/importBatches` con reversión

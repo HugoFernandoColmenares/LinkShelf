@@ -410,6 +410,38 @@ button:disabled {
   padding: 32px 8px;
   color: var(--ls-muted);
 }
+.import-panel {
+  width: min(960px, calc(100% - 32px));
+}
+.folder-map {
+  display: grid;
+  gap: 8px;
+}
+.folder-map label {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+th,
+td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid var(--ls-line);
+  vertical-align: top;
+}
+caption {
+  text-align: left;
+  color: var(--ls-muted);
+  margin-bottom: 8px;
+}
 dialog {
   border: 1px solid var(--ls-line);
   border-radius: 16px;
