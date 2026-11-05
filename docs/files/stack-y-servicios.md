@@ -76,7 +76,7 @@ Firebase App Check con **reCAPTCHA Enterprise** (gratis hasta 10 000 evaluacione
 
 1. **Proyecto Firebase** en <https://console.firebase.google.com> (plan Spark por defecto; **no** vincular cuenta de facturación). Desactivar Google Analytics (no se usa).
 2. **Firestore**: crear base `(default)` en modo producción, edición **Standard**, ubicación `nam5` (EE. UU. multirregión) o `southamerica-east1` (São Paulo) para menor latencia desde Colombia. La ubicación no se puede cambiar después.
-3. **Authentication** → _Sign-in method_ → habilitar **Google**. En _Settings → Authorized domains_ añadir el dominio de Vercel (`linkshelf.vercel.app` y el dominio propio si existe). Para previews de Vercel ver [despliegue-y-ci.md](despliegue-y-ci.md).
+3. **Authentication** → _Sign-in method_ → habilitar **Google**. En _Settings → Authorized domains_ confirmar `linkshelf-hugo.web.app` y `linkshelf-hugo.firebaseapp.com` (y el dominio propio si existe). Para previews ver [despliegue-y-ci.md](despliegue-y-ci.md).
 4. **Google Cloud Console** (mismo proyecto) → _APIs y servicios → Credenciales_: el client ID OAuth web que crea Firebase; añadir `https://<extension-id>.chromiumapp.org/` como _URI de redireccionamiento autorizado_ para la extensión (ver [extension-navegador.md](extension-navegador.md)).
 5. **App web** registrada en _Project settings → Your apps_ → copiar la config a `.env` (ver `.env.example`).
 6. **Firebase CLI** (`pnpm add -D firebase-tools`): `firebase login`, `firebase use --add`, y despliegue de `firestore.rules` y `firestore.indexes.json`.

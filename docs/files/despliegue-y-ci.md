@@ -4,12 +4,12 @@
 
 ## Entornos
 
-| Entorno    | Web                                      | Firebase                                                                   | Extensión                      |
-| ---------- | ---------------------------------------- | -------------------------------------------------------------------------- | ------------------------------ |
-| Local      | `pnpm --filter web dev` (localhost:4200) | **Emulator Suite** (`firebase emulators:start`, proyecto `demo-linkshelf`) | `pnpm --filter extension dev`  |
-| CI         | build + e2e                              | Emuladores dentro del job (`firebase emulators:exec`)                      | artefacto zip                  |
-| Preview    | Vercel Preview por PR                    | Proyecto de producción (cada usuario solo ve lo suyo)                      | artefacto zip del CI           |
-| Producción | Vercel Production (`main`)               | Proyecto `linkshelf` (plan **Spark**)                                      | Carga sin empaquetar / tiendas |
+| Entorno    | Web                                         | Firebase                                                                   | Extensión                      |
+| ---------- | ------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------ |
+| Local      | `pnpm --filter web dev` (localhost:4200)    | **Emulator Suite** (`firebase emulators:start`, proyecto `demo-linkshelf`) | `pnpm --filter extension dev`  |
+| CI         | build + e2e                                 | Emuladores dentro del job (`firebase emulators:exec`)                      | artefacto zip                  |
+| Preview    | Vercel Preview por PR                       | Proyecto de producción (cada usuario solo ve lo suyo)                      | artefacto zip del CI           |
+| Producción | Firebase Hosting (`linkshelf-hugo.web.app`) | Proyecto `linkshelf-hugo` (plan **Spark**)                                 | Carga sin empaquetar / tiendas |
 
 > En Spark se pueden tener varios proyectos gratuitos, pero no hace falta uno de staging: los emuladores cubren desarrollo y CI sin consumir cuota.
 
@@ -22,6 +22,10 @@
   "firestore": {
     "rules": "firebase/firestore.rules",
     "indexes": "firebase/firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "apps/web/dist/web/browser",
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
   },
   "emulators": {
     "auth": { "port": 9099 },
@@ -41,7 +45,10 @@ pnpm add -D -w firebase-tools
 pnpm firebase login                      # una vez, local
 pnpm firebase use default
 pnpm firebase emulators:start            # Auth + Firestore + UI en :4000
-pnpm firebase deploy --only firestore:rules,firestore:indexes
+# Hosting (después del build de producción). No publica reglas:
+# pnpm firebase deploy --only hosting --project linkshelf-hugo
+# Reglas e índices, solo tras revisarlas:
+# pnpm firebase deploy --only firestore:rules,firestore:indexes
 ```
 
 - `firestore.rules` y `firestore.indexes.json` son la **única** fuente de verdad: nada de editar reglas en la consola.
@@ -57,9 +64,18 @@ pnpm firebase deploy --only firestore:rules,firestore:indexes
 - Firebase Auth → _Authorized domains_: `linkshelf.vercel.app` (y dominio propio). Firebase no acepta comodines, así que para probar login en previews se añade un **alias fijo de rama** (p. ej. `linkshelf-git-dev-<team>.vercel.app`) o se prueba el login solo en producción y local.
 - `authDomain`: usar `<project-id>.firebaseapp.com`. Con navegadores que bloquean cookies de terceros, `signInWithPopup` sigue funcionando; si se migra a `signInWithRedirect`, servir `/__/auth/*` desde el propio dominio con un rewrite de Vercel hacia `https://<project-id>.firebaseapp.com/__/auth/:path*` y usar el dominio de Vercel como `authDomain`.
 
-### Alternativa: Firebase Hosting
+### Firebase Hosting
 
-Gratis en Spark (10 GB de almacenamiento, 360 MB/día de transferencia). `firebase init hosting` con `public: apps/web/dist/web/browser` y rewrite SPA; canales de preview con `firebase hosting:channel:deploy pr-<n>` (dominios de preview autorizados automáticamente en Auth). Se mantiene Vercel por su integración Git, pero el cambio es directo si se prefiere todo en Firebase.
+Gratis en Spark (10 GB de almacenamiento, 360 MB/día de transferencia). `firebase.json` publica `apps/web/dist/web/browser` con rewrite SPA a `/index.html` y los mismos headers de seguridad que `apps/web/vercel.json`. El workflow `.github/workflows/firebase-hosting.yml` (push a `main` y `workflow_dispatch`) hace el build con `FIREBASE_USE_EMULATORS=false` y despliega **solo Hosting** (`firebase deploy --only hosting --project linkshelf-hugo`). No publica reglas ni índices.
+
+Canales de preview: `firebase hosting:channel:deploy pr-<n>` (Auth autoriza esos dominios automáticamente).
+
+Dominios a confirmar en Firebase Auth → _Authorized domains_ (Firebase suele añadir los del proyecto; hay que comprobarlo):
+
+- `linkshelf-hugo.web.app`
+- `linkshelf-hugo.firebaseapp.com`
+
+`authDomain` sigue siendo `linkshelf-hugo.firebaseapp.com`.
 
 ## Extensión
 
@@ -152,7 +168,7 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
 ```
 
-La cuenta de servicio solo tiene los roles _Firebase Rules Admin_ y _Cloud Datastore Index Admin_. Vercel despliega la web por su integración Git (o `vercel deploy --prod` con `VERCEL_TOKEN`).
+La cuenta de servicio de reglas solo necesita los roles _Firebase Rules Admin_ y _Cloud Datastore Index Admin_. El workflow de Hosting usa el secret `FIREBASE_SERVICE_ACCOUNT` con permiso de Hosting (_Firebase Hosting Admin_). Puede ser la misma cuenta si también tiene ese rol; si no, el deploy de Hosting falla y las reglas siguen sin publicarse. Vercel puede seguir desplegando la web por su integración Git, pero el camino previsto del sitio es Firebase Hosting.
 
 ### Sin _keep-alive_
 
@@ -166,7 +182,22 @@ A diferencia de otros free tiers, un proyecto Firebase Spark **no se pausa** por
 
 ## Secrets del repositorio
 
-`FIREBASE_SERVICE_ACCOUNT` (deploy de reglas/índices), `BACKUP_SERVICE_ACCOUNT` (opcional), `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (y de tiendas si se publica). La configuración web de Firebase no es secreta, pero se pasa como variables de Vercel para no duplicarla.
+`FIREBASE_SERVICE_ACCOUNT` (JSON de la cuenta de servicio, o ese JSON en base64), `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`. Opcionales: `FIREBASE_STORAGE_BUCKET`, `FIREBASE_MESSAGING_SENDER_ID` (el MVP no usa Storage). También, si se sigue usando Vercel: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`. La configuración web de Firebase no es un secreto de acceso, pero no se versiona: el build la inyecta desde secrets o desde `.env` local.
+
+Build local equivalente al del workflow (no commitear `.env`):
+
+```bash
+export FIREBASE_USE_EMULATORS=false
+export FIREBASE_API_KEY=...          # Project settings → Your apps
+export FIREBASE_AUTH_DOMAIN=linkshelf-hugo.firebaseapp.com
+export FIREBASE_PROJECT_ID=linkshelf-hugo
+export FIREBASE_APP_ID=...
+export SITE_URL=https://linkshelf-hugo.web.app
+pnpm install --frozen-lockfile
+pnpm --filter @linkshelf/web build
+# Solo Hosting. No incluye firestore:rules ni firestore:indexes.
+GOOGLE_APPLICATION_CREDENTIALS=/ruta/sa.json pnpm exec firebase deploy --only hosting --project linkshelf-hugo --non-interactive
+```
 
 ## Versionado y releases
 
