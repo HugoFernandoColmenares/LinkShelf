@@ -1,0 +1,80 @@
+name: Firebase Hosting
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-hosting-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check Firebase secrets
+        id: gate
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+        run: |
+          missing=0
+          for name in FIREBASE_SERVICE_ACCOUNT FIREBASE_API_KEY FIREBASE_AUTH_DOMAIN FIREBASE_PROJECT_ID FIREBASE_APP_ID; do
+            if [ -z "${!name}" ]; then
+              echo "Missing $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Firebase Hosting secrets are incomplete. Deploy skipped."
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build web
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          FIREBASE_USE_EMULATORS: 'false'
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          SITE_URL: https://linkshelf-hugo.web.app
+        run: pnpm --filter @linkshelf/web build
+      - name: Write service account
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: node scripts/write-service-account.mjs "$GOOGLE_APPLICATION_CREDENTIALS"
+      - name: Deploy Hosting
+        if: steps.gate.outputs.deploy == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+        run: pnpm exec firebase deploy --only hosting --project linkshelf-hugo --non-interactive
+      - name: Skip deploy
+        if: steps.gate.outputs.deploy != 'true'
+        run: |
+          echo "Deploy skipped. Add these GitHub Actions secrets, then re-run this workflow:"
+          echo "FIREBASE_SERVICE_ACCOUNT, FIREBASE_API_KEY, FIREBASE_AUTH_DOMAIN, FIREBASE_PROJECT_ID, FIREBASE_APP_ID"
+          echo "Optional: FIREBASE_STORAGE_BUCKET, FIREBASE_MESSAGING_SENDER_ID"
+          echo "This workflow deploys Hosting only. It does not deploy Firestore rules or indexes."
+          exit 1

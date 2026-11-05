@@ -57,7 +57,7 @@ Cada enlace tiene **una categoría principal** y **cero o más etiquetas secunda
 
 ## Estado
 
-El MVP de la fase 1 corre en local contra los **emuladores** (`demo-linkshelf`). El proyecto Firebase real es `linkshelf-hugo` (Spark, Firestore en `nam5`, Auth con Google). La `apiKey` y el `appId` no están en el repo: van en `.env` o en los secrets de Vercel. Las reglas de Firestore están versionadas y **no se despliegan** desde aquí.
+El MVP de la fase 1 corre en local contra los **emuladores** (`demo-linkshelf`). El proyecto Firebase real es `linkshelf-hugo` (Spark, Firestore en `nam5`, Auth con Google). La `apiKey` y el `appId` no están en el repo: van en `.env` o en los secrets de GitHub (`FIREBASE_*`). Hosting está en `firebase.json` y lo publica `.github/workflows/firebase-hosting.yml` (solo Hosting). Las reglas de Firestore están versionadas y **no se despliegan** desde ese workflow.
 
 ## Estructura del monorepo
 
