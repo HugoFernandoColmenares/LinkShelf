@@ -14,3 +14,5 @@ declare const __LS_AUTH_EMULATOR_URL__: string;
 declare const __LS_FIRESTORE_HOST__: string;
 declare const __LS_FIRESTORE_PORT__: number;
 declare const __LS_SITE_URL__: string;
+declare const __LS_ALLOWED_UIDS__: readonly string[];
+declare const __LS_ALLOWED_EMAILS__: readonly string[];

@@ -50,6 +50,8 @@ export default defineConfig({
       __LS_FIRESTORE_HOST__: JSON.stringify(env.firestoreEmulatorHost),
       __LS_FIRESTORE_PORT__: JSON.stringify(env.firestoreEmulatorPort),
       __LS_SITE_URL__: JSON.stringify(env.siteUrl),
+      __LS_ALLOWED_UIDS__: JSON.stringify(env.allowlist.uids),
+      __LS_ALLOWED_EMAILS__: JSON.stringify(env.allowlist.emails),
     },
   }),
 });

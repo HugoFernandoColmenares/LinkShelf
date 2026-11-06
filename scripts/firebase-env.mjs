@@ -23,6 +23,18 @@ export function loadDotEnv(file = resolve(repoRoot, '.env')) {
   }
 }
 
+function parseList(value, normalize = (item) => item) {
+  if (!value) return [];
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((item) => normalize(item.trim()))
+        .filter(Boolean),
+    ),
+  ];
+}
+
 export function resolveFirebaseEnv() {
   loadDotEnv();
   const apiKey = process.env.FIREBASE_API_KEY ?? '';
@@ -52,5 +64,9 @@ export function resolveFirebaseEnv() {
     firestoreEmulatorPort: Number(
       (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').split(':')[1] || 8080,
     ),
+    allowlist: {
+      uids: parseList(process.env.LINKSHELF_ALLOWED_UIDS),
+      emails: parseList(process.env.LINKSHELF_ALLOWED_EMAILS, (item) => item.toLowerCase()),
+    },
   };
 }

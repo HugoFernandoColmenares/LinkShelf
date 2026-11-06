@@ -90,7 +90,7 @@ export class ImportPage {
   async confirm(): Promise<void> {
     const uid = this.store.uid();
     if (!uid) {
-      this.error.set('Inicia sesión para importar.');
+      this.error.set('No hay una biblioteca activa.');
       return;
     }
     this.busy.set(true);

@@ -7,10 +7,16 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./personal": {
+      "types": "./dist/personal.d.ts",
+      "default": "./dist/personal.js"
     }
   },
+  "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -19,6 +25,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
   }
 }

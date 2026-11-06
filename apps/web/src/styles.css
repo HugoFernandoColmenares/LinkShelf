@@ -197,11 +197,41 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.demo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 8px 20px;
+  background: var(--ls-surface);
+  border-bottom: 1px solid var(--ls-line);
+  color: var(--ls-muted);
+  font-size: 14px;
+}
+.demo-banner p {
+  margin: 0;
+  flex: 1 1 280px;
+}
+.demo-banner__alert {
+  display: block;
+  margin-top: 4px;
+  color: var(--ls-text);
+}
+.demo-banner__note {
+  flex-basis: 100%;
+}
 .login {
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 24px;
+}
+.login__card {
+  display: grid;
+  gap: 12px;
+}
+.login__card .button {
+  width: 100%;
 }
 .login__card,
 .panel {

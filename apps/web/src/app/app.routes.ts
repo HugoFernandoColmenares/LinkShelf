@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard } from './core/auth.guard';
+import { guestGuard } from './core/auth.guard';
 
 export const routes: Routes = [
   {
@@ -9,7 +9,6 @@ export const routes: Routes = [
   },
   {
     path: '',
-    canActivate: [authGuard],
     loadComponent: () => import('./features/shell/shell').then((m) => m.Shell),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'links' },

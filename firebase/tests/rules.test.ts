@@ -54,6 +54,12 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await env.clearFirestore();
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'config/access'), {
+      uids: ['alice'],
+      emails: ['hugo@example.com'],
+    });
+  });
 });
 
 describe('firestore rules', () => {
@@ -163,6 +169,38 @@ describe('firestore rules', () => {
       setDoc(doc(alice, 'users/alice/domainRules/example.com'), { category: 'nope' }),
     );
     await assertFails(setDoc(doc(alice, 'foo/bar'), { a: 1 }));
+  });
+
+  it('una cuenta fuera de la lista no escribe ni en su propia ruta', async () => {
+    const bob = env.authenticatedContext('bob').firestore();
+    await assertFails(setDoc(doc(bob, `users/bob/links/${linkId}`), validLink()));
+    await assertFails(getDoc(doc(bob, 'users/bob')));
+    await assertFails(setDoc(doc(bob, 'users/bob/domainRules/example.com'), { category: 'ia' }));
+  });
+
+  it('el correo verificado de la lista accede solo a su uid', async () => {
+    const hugo = env
+      .authenticatedContext('hugo', { email: 'hugo@example.com', email_verified: true })
+      .firestore();
+    await assertSucceeds(setDoc(doc(hugo, `users/hugo/links/${linkId}`), validLink()));
+    await assertFails(getDoc(doc(hugo, `users/alice/links/${linkId}`)));
+  });
+
+  it('el mismo correo sin verificar no entra', async () => {
+    const hugo = env
+      .authenticatedContext('hugo', { email: 'hugo@example.com', email_verified: false })
+      .firestore();
+    await assertFails(setDoc(doc(hugo, `users/hugo/links/${linkId}`), validLink()));
+  });
+
+  it('nadie lee ni reescribe config/access, y sin ese documento no hay acceso', async () => {
+    const alice = env.authenticatedContext('alice').firestore();
+    await assertFails(getDoc(doc(alice, 'config/access')));
+    await assertFails(
+      setDoc(doc(alice, 'config/access'), { uids: ['alice', 'bob'], emails: ['hugo@example.com'] }),
+    );
+    await env.clearFirestore();
+    await assertFails(setDoc(doc(alice, `users/alice/links/${linkId}`), validLink()));
   });
 
   it('el dueño puede borrar su enlace y escribir su perfil', async () => {

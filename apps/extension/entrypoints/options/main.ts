@@ -9,7 +9,8 @@ import {
   type BookmarkDraft,
   type CategorySlug,
 } from '@linkshelf/core';
-import { LinksRepo } from '@linkshelf/firebase';
+import { LinksRepo } from '@linkshelf/firebase/personal';
+import { PRIVATE_INSTANCE_MESSAGE, personalUser } from '../../lib/access';
 import {
   auth,
   db,
@@ -72,9 +73,14 @@ function render(email: string | null, message = ''): void {
 }
 
 async function importBrowserBookmarks(email: string | null): Promise<void> {
-  const user = auth.currentUser;
+  const user = personalUser();
   if (!user) {
-    render(email, 'Inicia sesión en la extensión antes de importar.');
+    render(
+      email,
+      auth.currentUser
+        ? PRIVATE_INSTANCE_MESSAGE
+        : 'Inicia sesión en la extensión antes de importar.',
+    );
     return;
   }
   const granted = await browser.permissions.request({ permissions: ['bookmarks'] });
@@ -149,4 +155,21 @@ async function saveImportedBookmarks(
   );
 }
 
-watchUser((user) => render(user?.email ?? null));
+let heldNotice = '';
+
+watchUser((user) => {
+  if (user && !personalUser(user)) {
+    heldNotice = PRIVATE_INSTANCE_MESSAGE;
+    render(null, heldNotice);
+    void signOutUser();
+    return;
+  }
+  if (!user && heldNotice) {
+    const notice = heldNotice;
+    heldNotice = '';
+    render(null, notice);
+    return;
+  }
+  heldNotice = '';
+  render(user?.email ?? null);
+});

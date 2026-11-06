@@ -22,15 +22,46 @@
     >
       ◐
     </button>
-    <button
-      type="button"
-      class="icon-button"
-      (click)="logout()"
-      [attr.aria-label]="'Cerrar sesión ' + email()"
-    >
-      {{ email() || 'Salir' }}
-    </button>
+    @if (personal()) {
+      <button
+        type="button"
+        class="icon-button"
+        (click)="logout()"
+        [attr.aria-label]="'Cerrar sesión ' + email()"
+      >
+        {{ email() || 'Salir' }}
+      </button>
+    } @else {
+      <a routerLink="/login" class="button">Entrar</a>
+    }
   </header>
+  @if (!personal()) {
+    <div class="demo-banner">
+      <p>
+        Modo demo. Los enlaces se quedan en este navegador.
+        @if (auth.blockedNotice(); as blocked) {
+          <span class="demo-banner__alert" role="alert">{{ blocked }}</span>
+        }
+      </p>
+      <button type="button" class="button" (click)="exportJson()">Exportar JSON</button>
+      <label class="button" for="demo-json">
+        Importar JSON
+        <input
+          id="demo-json"
+          class="sr-only"
+          type="file"
+          accept="application/json,.json"
+          (change)="importJson($event)"
+        />
+      </label>
+      @if (notice()) {
+        <p class="demo-banner__note" role="status">{{ notice() }}</p>
+      }
+      @if (portabilityError()) {
+        <p class="form-error" role="alert">{{ portabilityError() }}</p>
+      }
+    </div>
+  }
   <main id="contenido">
     <router-outlet />
   </main>

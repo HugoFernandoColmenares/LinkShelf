@@ -8,11 +8,16 @@ import {
   type PreparedLink,
 } from '@linkshelf/core';
 import {
+  browserStorage,
+  DEMO_OWNER_ID,
   firestoreErrorMessage,
   LinksRepo,
+  LocalLinkRepository,
   type Link,
+  type LinkBundle,
   type LinkChoice,
   type LinkPatch,
+  type LinkRepository,
 } from '@linkshelf/firebase';
 import { AuthService } from './auth.service';
 import { firestore } from './firebase';
@@ -20,8 +25,8 @@ import { firestore } from './firebase';
 @Injectable({ providedIn: 'root' })
 export class LinksStore {
   private readonly auth = inject(AuthService);
-  private readonly repo = new LinksRepo(firestore);
-  private stopWatch: (() => void) | null = null;
+  private readonly cloud = new LinksRepo(firestore);
+  private readonly local = new LocalLinkRepository(browserStorage());
 
   readonly links = signal<Link[]>([]);
   readonly loading = signal(true);
@@ -59,17 +64,18 @@ export class LinksStore {
 
   constructor() {
     effect((onCleanup) => {
-      const user = this.auth.user();
-      this.stopWatch?.();
-      this.stopWatch = null;
-      if (!user) {
-        this.links.set([]);
+      if (!this.auth.ready()) return;
+      const personal = this.auth.mode() === 'personal';
+      const uid = personal ? this.auth.user()?.uid : DEMO_OWNER_ID;
+      this.links.set([]);
+      if (!uid) {
         this.loading.set(false);
         return;
       }
       this.loading.set(true);
-      const stop = this.repo.watch(
-        user.uid,
+      this.error.set(null);
+      const stop = this.repository().watch(
+        uid,
         (links) => {
           this.links.set(links);
           this.loading.set(false);
@@ -80,7 +86,6 @@ export class LinksStore {
           this.loading.set(false);
         },
       );
-      this.stopWatch = stop;
       onCleanup(() => stop());
     });
   }
@@ -103,33 +108,46 @@ export class LinksStore {
   }
 
   async save(prepared: PreparedLink, choice: LinkChoice): Promise<void> {
-    const uid = this.auth.user()?.uid;
-    if (!uid) throw new Error('Inicia sesión para guardar.');
-    await this.repo.create(uid, prepared, choice);
+    await this.repository().create(this.requireUid(), prepared, choice);
   }
 
   async update(id: string, patch: LinkPatch): Promise<void> {
-    const uid = this.auth.user()?.uid;
-    if (!uid) throw new Error('Inicia sesión para editar.');
-    await this.repo.update(uid, id, patch);
+    await this.repository().update(this.requireUid(), id, patch);
   }
 
   async remove(id: string): Promise<void> {
-    const uid = this.auth.user()?.uid;
-    if (!uid) throw new Error('Inicia sesión para eliminar.');
-    await this.repo.remove(uid, id);
+    await this.repository().remove(this.requireUid(), id);
   }
 
   uid(): string | null {
-    return this.auth.user()?.uid ?? null;
+    if (this.auth.mode() === 'personal') return this.auth.user()?.uid ?? null;
+    return DEMO_OWNER_ID;
   }
 
   importMany(
     report: { id: string; source: string; total: number; duplicates: number; failed: number },
     items: Array<{ prepared: PreparedLink; category: CategorySlug }>,
   ): Promise<number> {
-    const uid = this.auth.user()?.uid;
-    if (!uid) return Promise.reject(new Error('Inicia sesión para importar.'));
-    return this.repo.importMany(uid, report, items);
+    const uid = this.uid();
+    if (!uid) return Promise.reject(new Error('No hay una biblioteca activa.'));
+    return this.repository().importMany(uid, report, items);
+  }
+
+  exportBundle(): Promise<LinkBundle> {
+    return this.repository().exportBundle(this.requireUid());
+  }
+
+  importBundle(bundle: unknown) {
+    return this.repository().importBundle(this.requireUid(), bundle);
+  }
+
+  private repository(): LinkRepository {
+    return this.auth.mode() === 'personal' ? this.cloud : this.local;
+  }
+
+  private requireUid(): string {
+    const uid = this.uid();
+    if (!uid) throw new Error('No hay una biblioteca activa.');
+    return uid;
   }
 }

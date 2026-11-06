@@ -16,14 +16,18 @@ import {
   writeBatch,
   type Firestore,
 } from 'firebase/firestore';
+import {
+  bundleFromLinks,
+  parseBundleEnvelope,
+  parseStoredLink,
+  storedIdMatches,
+  type StoredLink,
+} from './bundle';
 import { DuplicateError } from './errors';
 import { parseLink, type Link, type LinkPatch } from './link';
+import type { LinkChoice, LinkRepository } from './repository';
 
-export interface LinkChoice {
-  category: CategorySlug;
-  tags: string[];
-  note?: string;
-}
+export type { LinkChoice };
 
 const EDITABLE: Array<keyof LinkPatch> = [
   'title',
@@ -38,7 +42,7 @@ const EDITABLE: Array<keyof LinkPatch> = [
   'canonicalUrl',
 ];
 
-export class LinksRepo {
+export class LinksRepo implements LinkRepository {
   constructor(private readonly db: Firestore) {}
 
   async getById(uid: string, id: string): Promise<Link | null> {
@@ -187,4 +191,86 @@ export class LinksRepo {
       (error) => onError?.(error),
     );
   }
+
+  async exportBundle(uid: string) {
+    return bundleFromLinks(await this.listAll(uid));
+  }
+
+  async importBundle(uid: string, bundle: unknown) {
+    const envelope = parseBundleEnvelope(bundle);
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    for (const item of envelope.links) {
+      const stored = parseStoredLink(item);
+      if (!stored || !(await storedIdMatches(stored))) {
+        skipped += 1;
+        continue;
+      }
+      const existing = await this.getById(uid, stored.id);
+      try {
+        if (!existing) {
+          await this.create(uid, toPrepared(stored), {
+            category: stored.category,
+            tags: stored.tags,
+            ...(stored.note ? { note: stored.note } : {}),
+          });
+          const patch = statusPatch(stored);
+          if (Object.keys(patch).length > 0) await this.update(uid, stored.id, patch);
+          created += 1;
+        } else if (existing.normalizedUrl !== stored.normalizedUrl) {
+          skipped += 1;
+        } else {
+          await this.update(uid, stored.id, {
+            title: stored.title,
+            category: stored.category,
+            tags: stored.tags,
+            status: stored.status,
+            favorite: stored.favorite,
+            note: stored.note,
+            description: stored.description,
+            imageUrl: stored.imageUrl,
+            metaStatus: stored.metaStatus,
+            canonicalUrl: stored.canonicalUrl,
+          });
+          updated += 1;
+        }
+      } catch {
+        skipped += 1;
+      }
+    }
+    return { created, updated, skipped };
+  }
+}
+
+function toPrepared(stored: StoredLink): PreparedLink {
+  return {
+    id: stored.id,
+    url: stored.url,
+    normalizedUrl: stored.normalizedUrl,
+    canonicalUrl: stored.canonicalUrl,
+    title: stored.title,
+    description: stored.description,
+    imageUrl: stored.imageUrl,
+    domain: stored.domain,
+    keywords: stored.keywords,
+    suggestion: {
+      category: stored.category,
+      tags: stored.tags,
+      confidence: 1,
+      lowConfidence: false,
+      reasons: ['import'],
+    },
+    source: stored.source,
+    metaStatus: stored.metaStatus,
+    ogType: null,
+    articlePublishedTime: null,
+  };
+}
+
+function statusPatch(stored: StoredLink): LinkPatch {
+  const patch: LinkPatch = {};
+  if (stored.status !== 'unread') patch.status = stored.status;
+  if (stored.favorite) patch.favorite = true;
+  return patch;
 }

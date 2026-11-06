@@ -3,9 +3,10 @@
     <p class="brand">⚓ LinkShelf</p>
     <h1>Tu bahía de enlaces limpios</h1>
     <p class="muted">
-      Guarda artículos sin parámetros de rastreo, detecta duplicados y ordénalos por categoría. La
-      misma colección en cualquier navegador.
+      Puedes usar LinkShelf sin cuenta: el modo demo guarda todo en este navegador. Entrar con
+      Google solo abre la base de datos de la cuenta autorizada.
     </p>
+    <a routerLink="/links" class="button">Continuar sin cuenta</a>
     <button type="button" class="button button--primary" [disabled]="busy()" (click)="google()">
       Continuar con Google
     </button>

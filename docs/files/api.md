@@ -5,7 +5,7 @@
 No hay backend propio ni endpoints HTTP propios. La "API" de LinkShelf son dos capas:
 
 1. **Funciones puras de `@linkshelf/core`** (normalizar, desenvolver, hash, similitud, categoría).
-2. **Repositorio `LinksRepo` de `@linkshelf/firebase`**, que envuelve el Firebase JS SDK modular. Lo usan la web y la extensión; todas las llamadas llevan implícitamente el ID token de Firebase Auth y son validadas por las Security Rules.
+2. **`LinkRepository` en `@linkshelf/firebase`**. `LocalLinkRepository` guarda el modo demo en `localStorage`. `LinksRepo` (`FirestoreLinkRepository`) envuelve el Firebase JS SDK modular para el modo personal. La extensión solo usa Firestore, y solo con una cuenta de la lista. Las Security Rules validan cada escritura.
 
 ## `@linkshelf/core`
 
