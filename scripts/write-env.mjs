@@ -12,6 +12,7 @@ export const environment = ${JSON.stringify(
     authEmulatorUrl: env.authEmulatorUrl,
     firestoreEmulatorHost: env.firestoreEmulatorHost,
     firestoreEmulatorPort: env.firestoreEmulatorPort,
+    allowlist: env.allowlist,
   },
   null,
   2,

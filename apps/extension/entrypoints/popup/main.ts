@@ -1,8 +1,9 @@
 import { browser } from 'wxt/browser';
 import { CATEGORIES, type CategorySlug } from '@linkshelf/core';
 import type { DuplicateCheck, PreparedLink } from '@linkshelf/core';
+import { PRIVATE_INSTANCE_MESSAGE } from '../../lib/access';
 import { siteUrl } from '../../lib/firebase';
-import { commitLink, inspectLink } from '../../lib/save';
+import { commitLink, inspectLink, type ShelfAccess } from '../../lib/save';
 
 const root = document.querySelector('#app');
 if (!root) throw new Error('Falta el contenedor');
@@ -23,7 +24,7 @@ function render(state: {
   normalizedUrl: string;
   category: CategorySlug;
   duplicate: DuplicateCheck;
-  signedIn: boolean;
+  access: ShelfAccess;
   message?: string;
   saved?: boolean;
   prepared?: PreparedLink;
@@ -51,11 +52,18 @@ function render(state: {
     <main>
       <p class="mono">${escapeHtml(state.normalizedUrl)}</p>
       ${duplicate}
+      ${state.access === 'denied' ? `<p class="error" role="alert">${escapeHtml(PRIVATE_INSTANCE_MESSAGE)}</p>` : ''}
       ${state.message ? `<p class="error" role="alert">${escapeHtml(state.message)}</p>` : ''}
       ${state.saved ? '<p role="status">Enlace guardado.</p>' : ''}
       <label>Título<input id="title" value="${escapeHtml(state.title)}" /></label>
       <label>Categoría<select id="category">${options}</select></label>
-      <div class="row"><button type="button" id="close">Cancelar</button>${state.signedIn ? action : '<button id="login" type="button">Iniciar sesión</button>'}</div>
+      <div class="row"><button type="button" id="close">Cancelar</button>${
+        state.access === 'personal'
+          ? action
+          : state.access === 'denied'
+            ? `<button id="login" type="button">Revisar la sesión</button>`
+            : '<button id="login" type="button">Iniciar sesión</button>'
+      }</div>
     </main>`;
   document.querySelector('#close')?.addEventListener('click', () => window.close());
   document
@@ -88,7 +96,7 @@ async function boot(): Promise<void> {
       title: 'Cómo construir un agente con TypeScript',
       normalizedUrl: 'https://blog.example.com/agentes',
       category: 'tutoriales',
-      signedIn: true,
+      access: 'personal',
       duplicate: {
         level: 'probable',
         matches: [
@@ -119,7 +127,7 @@ async function boot(): Promise<void> {
       normalizedUrl: inspection.prepared.normalizedUrl,
       category: inspection.prepared.suggestion.category,
       duplicate: inspection.duplicate,
-      signedIn: inspection.signedIn,
+      access: inspection.access,
       prepared: inspection.prepared,
     });
   } catch (error) {

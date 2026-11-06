@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { PRIVATE_INSTANCE_MESSAGE, personalUser } from '../lib/access';
 import { commitLink, inspectLink, removeLink } from '../lib/save';
 import { auth } from '../lib/firebase';
 
@@ -21,6 +22,10 @@ async function notify(id: string, message: string, undoLinkId?: string): Promise
 async function saveFromMenu(url: string, title?: string): Promise<void> {
   if (!auth.currentUser) {
     await notify(`auth-${Date.now()}`, 'Inicia sesión en LinkShelf para guardar.');
+    return;
+  }
+  if (!personalUser()) {
+    await notify(`private-${Date.now()}`, PRIVATE_INSTANCE_MESSAGE);
     return;
   }
   try {

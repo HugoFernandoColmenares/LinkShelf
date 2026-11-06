@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { authErrorMessage } from '../../core/format';
 
 @Component({
   selector: 'ls-login-page',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './login-page.html',
 })
@@ -28,11 +28,18 @@ export class LoginPage {
     await this.run(() => this.auth.signInLocal(this.email(), this.password()));
   }
 
-  private async run(action: () => Promise<void>): Promise<void> {
+  private async run(action: () => Promise<'demo' | 'personal'>): Promise<void> {
     this.error.set(null);
     this.busy.set(true);
     try {
-      await action();
+      const mode = await action();
+      if (mode !== 'personal') {
+        this.error.set(
+          this.auth.blockedNotice() ??
+            'Esta es una instancia privada. Sigues en el modo demo y los enlaces se quedan en este navegador.',
+        );
+        return;
+      }
       await this.router.navigate(['/links']);
     } catch (error) {
       this.error.set(authErrorMessage(error));

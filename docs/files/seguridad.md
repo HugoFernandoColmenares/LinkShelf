@@ -8,7 +8,8 @@ Sin backend propio, la seguridad descansa en tres piezas: **Firebase Auth** (ide
 
 | Amenaza                                                                       | Control                                                                                                                                                                                                        |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Un usuario lee/modifica enlaces de otro                                       | Security Rules: solo `request.auth.uid == uid` accede a `users/{uid}/**`                                                                                                                                       |
+| Un usuario lee/modifica enlaces de otro                                       | Security Rules: hace falta estar en `config/access` y además `request.auth.uid == uid` en `users/{uid}/**`. El documento de la lista no se puede leer ni escribir desde el cliente                             |
+| Un visitante usa la cuenta de Google para guardar en la base de Hugo          | La interfaz vuelve al modo demo. Las reglas niegan la ruta aunque el cliente esté modificado                                                                                                                   |
 | Alguien usa la configuración pública de Firebase (API key) para leer/escribir | La API key no es un secreto; sin sesión válida las reglas niegan todo. API key restringida por API y referrer; App Check opcional                                                                              |
 | Cliente modificado escribe datos basura o gigantes                            | Validación de tipos, tamaños, enumeraciones y lista blanca de campos en las reglas                                                                                                                             |
 | Cliente modificado rompe la invariante "ID = hash"                            | Las reglas exigen forma (`^[0-9a-f]{64}$`) e inmutabilidad de `normalizedUrl`; el hash exacto no puede verificarse en reglas (no hay SHA-256), pero un ID incorrecto solo afecta los datos del propio atacante |
@@ -29,10 +30,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
 
-    // Opcional: limitar el proyecto a cuentas concretas
-    // function allowed() { return request.auth.token.email in ['tu-correo@gmail.com'] && request.auth.token.email_verified; }
+    // isAllowlisted() exige config/access (uids o correo verificado). Ver firebase/firestore.rules.
+    function isOwner(uid) { return isAllowlisted() && request.auth.uid == uid; }
 
     function categories() { return ['articulos', 'tutoriales', 'projects', 'webpages', 'ia', 'diseno']; }
     function optString(v, max) { return v == null || (v is string && v.size() <= max); }

@@ -1,13 +1,49 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // config/access is the allowlist (uids + verified emails). Clients cannot
+    // read or write it; create it from the Firebase console before deploying
+    // these rules. Shape: { uids: string[], emails: string[] }, at most 10 each.
+    // Emails must match the auth token exactly (lowercase).
 
     function signedIn() {
       return request.auth != null;
     }
 
+    function accessPath() {
+      return /databases/$(database)/documents/config/access;
+    }
+
+    function accessData() {
+      return get(accessPath()).data;
+    }
+
+    function isAllowlisted() {
+      return signedIn()
+        && exists(accessPath())
+        && accessData().keys().hasAll(['uids', 'emails'])
+        && accessData().uids is list
+        && accessData().emails is list
+        && accessData().uids.size() <= 10
+        && accessData().emails.size() <= 10
+        && (
+          request.auth.uid in accessData().uids
+          || (
+            request.auth.token.email_verified == true
+            && request.auth.token.email is string
+            && request.auth.token.email.size() > 0
+            && request.auth.token.email.size() <= 320
+            && request.auth.token.email in accessData().emails
+          )
+        );
+    }
+
     function isOwner(uid) {
-      return signedIn() && request.auth.uid == uid;
+      return isAllowlisted() && request.auth.uid == uid;
+    }
+
+    match /config/{docId} {
+      allow read, write: if false;
     }
 
     function categories() {

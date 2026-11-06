@@ -5,15 +5,18 @@ import {
   type DuplicateCheck,
   type PreparedLink,
 } from '@linkshelf/core';
-import { DuplicateError, LinksRepo, type LinkChoice } from '@linkshelf/firebase';
+import { DuplicateError, LinksRepo, type LinkChoice } from '@linkshelf/firebase/personal';
+import { PRIVATE_INSTANCE_MESSAGE, personalUser } from './access';
 import { auth, db } from './firebase';
 
 const repo = new LinksRepo(db);
 
+export type ShelfAccess = 'anonymous' | 'personal' | 'denied';
+
 export interface Inspection {
   prepared: PreparedLink;
   duplicate: DuplicateCheck;
-  signedIn: boolean;
+  access: ShelfAccess;
 }
 
 async function hasHostPermission(): Promise<boolean> {
@@ -45,15 +48,19 @@ export async function inspectLink(input: {
     ...(input.title ? { title: input.title } : {}),
     ...(html ? { html } : {}),
   });
-  const user = auth.currentUser;
+  const signedIn = auth.currentUser;
+  const user = personalUser(signedIn);
+  if (!signedIn) {
+    return { prepared, access: 'anonymous', duplicate: { level: 'none', matches: [] } };
+  }
   if (!user) {
-    return { prepared, signedIn: false, duplicate: { level: 'none', matches: [] } };
+    return { prepared, access: 'denied', duplicate: { level: 'none', matches: [] } };
   }
   const existing = await repo.getById(user.uid, prepared.id);
   if (existing) {
     return {
       prepared,
-      signedIn: true,
+      access: 'personal',
       duplicate: {
         level: 'exact',
         matches: [
@@ -81,11 +88,12 @@ export async function inspectLink(input: {
     },
     candidates,
   );
-  return { prepared, signedIn: true, duplicate: near };
+  return { prepared, access: 'personal', duplicate: near };
 }
 
 export async function commitLink(prepared: PreparedLink, choice: LinkChoice): Promise<void> {
-  const user = auth.currentUser;
+  if (auth.currentUser && !personalUser()) throw new Error(PRIVATE_INSTANCE_MESSAGE);
+  const user = personalUser();
   if (!user) throw new Error('Inicia sesión para guardar.');
   try {
     await repo.create(user.uid, prepared, choice);
@@ -96,7 +104,7 @@ export async function commitLink(prepared: PreparedLink, choice: LinkChoice): Pr
 }
 
 export async function removeLink(id: string): Promise<void> {
-  const user = auth.currentUser;
+  const user = personalUser();
   if (!user) return;
   await repo.remove(user.uid, id);
 }
